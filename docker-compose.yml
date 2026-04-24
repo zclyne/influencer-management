@@ -1,0 +1,38 @@
+services:
+  backend:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm
+    working_dir: /app/backend
+    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: local
+      DATABASE_URL: sqlite:////app/.data/desktop_irm.db
+      REDIS_URL: redis://redis:6379/0
+      LOCAL_STORAGE_DIR: /app/.data/storage
+      CORS_ORIGINS: http://localhost:5173
+      UV_PROJECT_ENVIRONMENT: /tmp/desktop-irm-backend-venv
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+
+  worker:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm
+    working_dir: /app/backend
+    command: uv run python -m app.tasks.worker
+    environment:
+      APP_ENV: local
+      DATABASE_URL: sqlite:////app/.data/desktop_irm.db
+      REDIS_URL: redis://redis:6379/0
+      LOCAL_STORAGE_DIR: /app/.data/storage
+      UV_PROJECT_ENVIRONMENT: /tmp/desktop-irm-worker-venv
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
