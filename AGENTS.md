@@ -48,45 +48,40 @@ Rules:
 - If a module is already completed, do not write a duplicate todo plan for it.
 - Keep plan files focused on module boundaries, API shape, service responsibilities, tests, and done criteria.
 
-Current todo plan files cover unfinished or deferred modules:
+Current todo plan files:
 
-- `plan/todo/api-contract-and-errors.md`
-- `plan/todo/background-jobs-observability.md`
-- `plan/todo/brand-management.md`
-- `plan/todo/compensation-cost-items.md`
 - `plan/todo/contract-draft-generator-deferred.md`
-- `plan/todo/deal-pipeline-management.md`
-- `plan/todo/deliverables.md`
-- `plan/todo/email-context-linking.md`
-- `plan/todo/export-reporting.md`
-- `plan/todo/frontend-workbench.md`
-- `plan/todo/influencer-library-crud.md`
-- `plan/todo/local-file-management.md`
-- `plan/todo/outreach-template-drafting.md`
 
-`plan/completed/.gitkeep` keeps the completed directory present until completed plan files exist.
+Current completed plan files:
+
+- `plan/completed/api-contract-and-errors.md`
+- `plan/completed/background-jobs-observability.md`
+- `plan/completed/brand-management.md`
+- `plan/completed/compensation-cost-items.md`
+- `plan/completed/deal-pipeline-management.md`
+- `plan/completed/deliverables.md`
+- `plan/completed/email-context-linking.md`
+- `plan/completed/export-reporting.md`
+- `plan/completed/frontend-workbench.md`
+- `plan/completed/influencer-library-crud.md`
+- `plan/completed/local-file-management.md`
+- `plan/completed/outreach-template-drafting.md`
 
 ## Current Implementation State
 
 Implemented or mostly implemented:
 
 - Backend FastAPI app with `/api/v1` route prefix.
-- SQLAlchemy models and Alembic migration for core MVP tables.
+- SQLAlchemy models and Alembic migrations for core MVP tables, jobs, email metadata, and outreach templates.
 - Repository implementations for core models.
 - Influencer ingestion/import flow for Modash CSV preview and confirm.
 - InfluencerBulkWriter for batch influencer graph writes.
 - Manual influencer creation entrypoint.
+- Full Influencer Library CRUD and platform/contact subresources.
+- Standalone Brand CRUD.
 - Campaign CRUD.
 - CampaignBrand association APIs.
-- Basic DealService helper for create-if-missing from ingestion.
-- Backend tests for health, data model, influencer ingestion, and campaigns.
-- Frontend placeholder Vue/Electron shell.
-
-Not yet complete:
-
-- Full Influencer Library CRUD and subresources.
-- Standalone Brand CRUD.
-- Full Deal Pipeline APIs and Campaign Workspace query.
+- Deal pipeline APIs, bulk deal operations, and campaign pipeline query.
 - Deliverable APIs.
 - CompensationItem APIs and summaries.
 - Email Context and Linking service.
@@ -94,8 +89,13 @@ Not yet complete:
 - Export/reporting.
 - Background job API and persisted job records.
 - Local file management service.
-- Unified API error model and OpenAPI client workflow.
-- Production frontend workbench.
+- Unified API error model and OpenAPI export helper.
+- Initial Vue/Electron frontend workbench.
+- Backend tests for health, data model, influencer ingestion, campaigns, brands, influencers, deals, deliverables, compensation, jobs/files, exports, email context, and outreach.
+
+Not yet complete:
+
+- Contract Draft Generator. It remains deferred and is not part of MVP.
 
 ## Architecture Rules
 

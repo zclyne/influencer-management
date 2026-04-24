@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from datetime import UTC
 from typing import Generic, TypeVar
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import models
@@ -40,6 +42,48 @@ class SqlAlchemyRepository(Generic[ModelT]):
 
 class BrandRepository(SqlAlchemyRepository[models.Brand]):
     model = models.Brand
+
+    def list(
+        self,
+        *,
+        query: str | None = None,
+        include_archived: bool = False,
+    ) -> list[models.Brand]:
+        stmt = select(models.Brand)
+        if query:
+            stmt = stmt.where(models.Brand.name.ilike(f"%{query.strip()}%"))
+        if not include_archived:
+            stmt = stmt.where(models.Brand.archived_at.is_(None))
+        stmt = stmt.order_by(models.Brand.name.asc())
+        return list(self.db.scalars(stmt))
+
+    def get_active(self, brand_id: str) -> models.Brand | None:
+        return self.db.scalar(
+            select(models.Brand).where(
+                models.Brand.id == brand_id,
+                models.Brand.archived_at.is_(None),
+            )
+        )
+
+    def find_by_name(self, name: str) -> models.Brand | None:
+        return self.db.scalar(
+            select(models.Brand).where(func.lower(models.Brand.name) == name.strip().lower())
+        )
+
+    def campaign_count(self, brand_id: str) -> int:
+        return self.db.scalar(
+            select(func.count())
+            .select_from(models.CampaignBrand)
+            .where(models.CampaignBrand.brand_id == brand_id)
+        ) or 0
+
+    def campaign_counts(self) -> dict[str, int]:
+        rows = self.db.execute(
+            select(models.CampaignBrand.brand_id, func.count(models.CampaignBrand.id)).group_by(
+                models.CampaignBrand.brand_id
+            )
+        )
+        return {brand_id: count for brand_id, count in rows}
 
 
 class CampaignRepository(SqlAlchemyRepository[models.Campaign]):
@@ -90,6 +134,60 @@ class CampaignBrandRepository(SqlAlchemyRepository[models.CampaignBrand]):
 class InfluencerRepository(SqlAlchemyRepository[models.Influencer]):
     model = models.Influencer
 
+    def list(
+        self,
+        *,
+        query: str | None = None,
+        platform: str | None = None,
+        country: str | None = None,
+        city: str | None = None,
+        include_archived: bool = False,
+    ) -> list[models.Influencer]:
+        stmt = select(models.Influencer).options(
+            selectinload(models.Influencer.platforms),
+            selectinload(models.Influencer.contacts),
+            selectinload(models.Influencer.deals),
+        )
+        if query:
+            like_query = f"%{query.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    models.Influencer.display_name.ilike(like_query),
+                    models.Influencer.full_name.ilike(like_query),
+                )
+            )
+        if platform:
+            stmt = stmt.join(models.InfluencerPlatform).where(
+                models.InfluencerPlatform.platform == platform
+            )
+        if country:
+            stmt = stmt.where(models.Influencer.country.ilike(country.strip()))
+        if city:
+            stmt = stmt.where(models.Influencer.city.ilike(city.strip()))
+        if not include_archived:
+            stmt = stmt.where(models.Influencer.archived_at.is_(None))
+        stmt = stmt.order_by(models.Influencer.updated_at.desc()).distinct()
+        return list(self.db.scalars(stmt))
+
+    def get_profile(self, influencer_id: str) -> models.Influencer | None:
+        return self.db.scalar(
+            select(models.Influencer)
+            .options(
+                selectinload(models.Influencer.platforms),
+                selectinload(models.Influencer.contacts),
+                selectinload(models.Influencer.deals).selectinload(models.Deal.campaign),
+            )
+            .where(models.Influencer.id == influencer_id)
+        )
+
+    def get_active(self, influencer_id: str) -> models.Influencer | None:
+        return self.db.scalar(
+            select(models.Influencer).where(
+                models.Influencer.id == influencer_id,
+                models.Influencer.archived_at.is_(None),
+            )
+        )
+
     def find_by_display_name(self, display_name: str, limit: int = 5) -> list[models.Influencer]:
         stmt: Select[tuple[models.Influencer]] = (
             select(models.Influencer)
@@ -101,6 +199,25 @@ class InfluencerRepository(SqlAlchemyRepository[models.Influencer]):
 
 class InfluencerPlatformRepository(SqlAlchemyRepository[models.InfluencerPlatform]):
     model = models.InfluencerPlatform
+
+    def list_for_influencer(self, influencer_id: str) -> list[models.InfluencerPlatform]:
+        return list(
+            self.db.scalars(
+                select(models.InfluencerPlatform)
+                .where(models.InfluencerPlatform.influencer_id == influencer_id)
+                .order_by(models.InfluencerPlatform.created_at.asc())
+            )
+        )
+
+    def get_for_influencer(
+        self, influencer_id: str, platform_id: str
+    ) -> models.InfluencerPlatform | None:
+        return self.db.scalar(
+            select(models.InfluencerPlatform).where(
+                models.InfluencerPlatform.id == platform_id,
+                models.InfluencerPlatform.influencer_id == influencer_id,
+            )
+        )
 
     def find_by_normalized_profile_url(
         self, normalized_profile_url: str | None
@@ -146,6 +263,10 @@ class InfluencerPlatformRepository(SqlAlchemyRepository[models.InfluencerPlatfor
             return None
         return self.db.scalar(select(models.InfluencerPlatform).where(*clauses))
 
+    def delete(self, platform: models.InfluencerPlatform) -> None:
+        self.db.delete(platform)
+        self.db.flush()
+
 
 class InfluencerAudienceSnapshotRepository(
     SqlAlchemyRepository[models.InfluencerAudienceSnapshot]
@@ -156,10 +277,34 @@ class InfluencerAudienceSnapshotRepository(
 class InfluencerContactRepository(SqlAlchemyRepository[models.InfluencerContact]):
     model = models.InfluencerContact
 
+    def list_for_influencer(self, influencer_id: str) -> list[models.InfluencerContact]:
+        return list(
+            self.db.scalars(
+                select(models.InfluencerContact)
+                .where(models.InfluencerContact.influencer_id == influencer_id)
+                .order_by(
+                    models.InfluencerContact.is_primary.desc(),
+                    models.InfluencerContact.created_at.asc(),
+                )
+            )
+        )
+
+    def get_for_influencer(
+        self, influencer_id: str, contact_id: str
+    ) -> models.InfluencerContact | None:
+        return self.db.scalar(
+            select(models.InfluencerContact).where(
+                models.InfluencerContact.id == contact_id,
+                models.InfluencerContact.influencer_id == influencer_id,
+            )
+        )
+
     def find_by_email(self, email: str) -> list[models.InfluencerContact]:
         return list(
             self.db.scalars(
-                select(models.InfluencerContact).where(models.InfluencerContact.email == email)
+                select(models.InfluencerContact).where(
+                    func.lower(models.InfluencerContact.email) == email.lower()
+                )
             )
         )
 
@@ -172,6 +317,17 @@ class InfluencerContactRepository(SqlAlchemyRepository[models.InfluencerContact]
                 models.InfluencerContact.email == email,
             )
         )
+
+    def clear_primary(self, influencer_id: str, exclude_contact_id: str | None = None) -> None:
+        contacts = self.list_for_influencer(influencer_id)
+        for contact in contacts:
+            if contact.id != exclude_contact_id:
+                contact.is_primary = False
+        self.db.flush()
+
+    def delete(self, contact: models.InfluencerContact) -> None:
+        self.db.delete(contact)
+        self.db.flush()
 
 
 class DealRepository(SqlAlchemyRepository[models.Deal]):
@@ -187,17 +343,265 @@ class DealRepository(SqlAlchemyRepository[models.Deal]):
             )
         )
 
+    def list_for_influencer(self, influencer_id: str) -> list[models.Deal]:
+        return list(
+            self.db.scalars(
+                select(models.Deal)
+                .options(selectinload(models.Deal.campaign))
+                .where(models.Deal.influencer_id == influencer_id)
+                .order_by(models.Deal.updated_at.desc())
+            )
+        )
+
+    def list_for_campaign(
+        self,
+        campaign_id: str,
+        *,
+        status: str | None = None,
+        platform: str | None = None,
+        lost_reason: str | None = None,
+        has_email_thread: bool | None = None,
+        include_archived: bool = False,
+    ) -> list[models.Deal]:
+        stmt = (
+            select(models.Deal)
+            .options(
+                selectinload(models.Deal.influencer).selectinload(
+                    models.Influencer.platforms
+                ),
+                selectinload(models.Deal.influencer).selectinload(models.Influencer.contacts),
+                selectinload(models.Deal.deliverables),
+                selectinload(models.Deal.compensation_items),
+                selectinload(models.Deal.email_thread_links),
+            )
+            .where(models.Deal.campaign_id == campaign_id)
+        )
+        if status:
+            stmt = stmt.where(models.Deal.status == status)
+        if platform:
+            stmt = stmt.where(
+                models.Deal.influencer.has(
+                    models.Influencer.platforms.any(
+                        models.InfluencerPlatform.platform == platform
+                    )
+                )
+            )
+        if lost_reason:
+            stmt = stmt.where(models.Deal.lost_reason == lost_reason)
+        if has_email_thread is True:
+            stmt = stmt.where(models.Deal.email_thread_links.any())
+        elif has_email_thread is False:
+            stmt = stmt.where(~models.Deal.email_thread_links.any())
+        if not include_archived:
+            stmt = stmt.where(models.Deal.archived_at.is_(None))
+        stmt = stmt.order_by(models.Deal.updated_at.desc())
+        return list(self.db.scalars(stmt))
+
+    def list_for_campaign_with_graph(
+        self,
+        campaign_id: str,
+        *,
+        status: str | None = None,
+        platform: str | None = None,
+        lost_reason: str | None = None,
+        include_archived: bool = False,
+        deal_ids: list[str] | None = None,
+    ) -> list[models.Deal]:
+        stmt = (
+            select(models.Deal)
+            .options(
+                selectinload(models.Deal.campaign)
+                .selectinload(models.Campaign.brand_links)
+                .selectinload(models.CampaignBrand.brand),
+                selectinload(models.Deal.influencer).selectinload(
+                    models.Influencer.platforms
+                ),
+                selectinload(models.Deal.influencer).selectinload(models.Influencer.contacts),
+                selectinload(models.Deal.deliverables),
+                selectinload(models.Deal.compensation_items),
+                selectinload(models.Deal.email_thread_links),
+            )
+            .where(models.Deal.campaign_id == campaign_id)
+        )
+        if status:
+            stmt = stmt.where(models.Deal.status == status)
+        if platform:
+            stmt = stmt.where(
+                models.Deal.influencer.has(
+                    models.Influencer.platforms.any(
+                        models.InfluencerPlatform.platform == platform
+                    )
+                )
+            )
+        if lost_reason:
+            stmt = stmt.where(models.Deal.lost_reason == lost_reason)
+        if not include_archived:
+            stmt = stmt.where(models.Deal.archived_at.is_(None))
+        if deal_ids:
+            stmt = stmt.where(models.Deal.id.in_(deal_ids))
+        stmt = stmt.order_by(models.Deal.updated_at.desc())
+        return list(self.db.scalars(stmt))
+
+    def get_detail(self, deal_id: str) -> models.Deal | None:
+        return self.db.scalar(
+            select(models.Deal)
+            .options(
+                selectinload(models.Deal.campaign)
+                .selectinload(models.Campaign.brand_links)
+                .selectinload(models.CampaignBrand.brand),
+                selectinload(models.Deal.influencer).selectinload(
+                    models.Influencer.platforms
+                ),
+                selectinload(models.Deal.influencer).selectinload(models.Influencer.contacts),
+                selectinload(models.Deal.deliverables),
+                selectinload(models.Deal.compensation_items),
+                selectinload(models.Deal.email_thread_links),
+            )
+            .where(models.Deal.id == deal_id)
+        )
+
+    def list_by_ids(self, ids: list[str]) -> list[models.Deal]:
+        if not ids:
+            return []
+        return list(
+            self.db.scalars(
+                select(models.Deal)
+                .options(
+                    selectinload(models.Deal.influencer).selectinload(
+                        models.Influencer.platforms
+                    ),
+                    selectinload(models.Deal.influencer).selectinload(
+                        models.Influencer.contacts
+                    ),
+                    selectinload(models.Deal.deliverables),
+                    selectinload(models.Deal.compensation_items),
+                    selectinload(models.Deal.email_thread_links),
+                )
+                .where(models.Deal.id.in_(ids))
+            )
+        )
+
 
 class DeliverableRepository(SqlAlchemyRepository[models.Deliverable]):
     model = models.Deliverable
+
+    def list_for_deal(self, deal_id: str) -> list[models.Deliverable]:
+        return list(
+            self.db.scalars(
+                select(models.Deliverable)
+                .where(models.Deliverable.deal_id == deal_id)
+                .order_by(models.Deliverable.due_date.asc(), models.Deliverable.created_at.asc())
+            )
+        )
+
+    def get_for_deal(self, deal_id: str, deliverable_id: str) -> models.Deliverable | None:
+        return self.db.scalar(
+            select(models.Deliverable).where(
+                models.Deliverable.id == deliverable_id,
+                models.Deliverable.deal_id == deal_id,
+            )
+        )
+
+    def delete(self, deliverable: models.Deliverable) -> None:
+        self.db.delete(deliverable)
+        self.db.flush()
 
 
 class CompensationItemRepository(SqlAlchemyRepository[models.CompensationItem]):
     model = models.CompensationItem
 
+    def list_for_deal(self, deal_id: str) -> list[models.CompensationItem]:
+        return list(
+            self.db.scalars(
+                select(models.CompensationItem)
+                .where(models.CompensationItem.deal_id == deal_id)
+                .order_by(
+                    models.CompensationItem.due_date.asc(),
+                    models.CompensationItem.created_at.asc(),
+                )
+            )
+        )
+
+    def get_for_deal(
+        self, deal_id: str, item_id: str
+    ) -> models.CompensationItem | None:
+        return self.db.scalar(
+            select(models.CompensationItem).where(
+                models.CompensationItem.id == item_id,
+                models.CompensationItem.deal_id == deal_id,
+            )
+        )
+
+    def delete(self, item: models.CompensationItem) -> None:
+        self.db.delete(item)
+        self.db.flush()
+
 
 class EmailThreadLinkRepository(SqlAlchemyRepository[models.EmailThreadLink]):
     model = models.EmailThreadLink
+
+    def list(
+        self,
+        *,
+        provider: str | None = None,
+        external_thread_id: str | None = None,
+        deal_id: str | None = None,
+        influencer_id: str | None = None,
+    ) -> list[models.EmailThreadLink]:
+        stmt = select(models.EmailThreadLink).order_by(models.EmailThreadLink.updated_at.desc())
+        if provider:
+            stmt = stmt.where(models.EmailThreadLink.provider == provider)
+        if external_thread_id:
+            stmt = stmt.where(models.EmailThreadLink.external_thread_id == external_thread_id)
+        if deal_id:
+            stmt = stmt.where(models.EmailThreadLink.deal_id == deal_id)
+        if influencer_id:
+            stmt = stmt.where(models.EmailThreadLink.influencer_id == influencer_id)
+        return list(self.db.scalars(stmt))
+
+    def list_manual_for_thread(
+        self, provider: str, external_thread_id: str
+    ) -> list[models.EmailThreadLink]:
+        return list(
+            self.db.scalars(
+                select(models.EmailThreadLink).where(
+                    models.EmailThreadLink.provider == provider,
+                    models.EmailThreadLink.external_thread_id == external_thread_id,
+                    models.EmailThreadLink.link_type == "manual",
+                )
+            )
+        )
+
+    def delete(self, link: models.EmailThreadLink) -> None:
+        self.db.delete(link)
+        self.db.flush()
+
+
+class EmailAccountRepository(SqlAlchemyRepository[models.EmailAccount]):
+    model = models.EmailAccount
+
+
+class EmailThreadMetadataRepository(SqlAlchemyRepository[models.EmailThreadMetadata]):
+    model = models.EmailThreadMetadata
+
+    def get_by_thread(
+        self, provider: str, external_thread_id: str
+    ) -> models.EmailThreadMetadata | None:
+        return self.db.scalar(
+            select(models.EmailThreadMetadata).where(
+                models.EmailThreadMetadata.provider == provider,
+                models.EmailThreadMetadata.external_thread_id == external_thread_id,
+            )
+        )
+
+    def list(self, *, provider: str | None = None) -> list[models.EmailThreadMetadata]:
+        stmt = select(models.EmailThreadMetadata).order_by(
+            models.EmailThreadMetadata.last_message_at.desc().nullslast(),
+            models.EmailThreadMetadata.updated_at.desc(),
+        )
+        if provider:
+            stmt = stmt.where(models.EmailThreadMetadata.provider == provider)
+        return list(self.db.scalars(stmt))
 
 
 class ImportSessionRepository(SqlAlchemyRepository[models.ImportSession]):
@@ -206,3 +610,41 @@ class ImportSessionRepository(SqlAlchemyRepository[models.ImportSession]):
 
 class StoredFileRepository(SqlAlchemyRepository[models.StoredFile]):
     model = models.StoredFile
+
+    def delete(self, stored_file: models.StoredFile) -> None:
+        self.db.delete(stored_file)
+        self.db.flush()
+
+
+class JobRecordRepository(SqlAlchemyRepository[models.JobRecord]):
+    model = models.JobRecord
+
+    def list(self, *, status: str | None = None, type: str | None = None) -> list[models.JobRecord]:
+        stmt = select(models.JobRecord).order_by(models.JobRecord.created_at.desc())
+        if status:
+            stmt = stmt.where(models.JobRecord.status == status)
+        if type:
+            stmt = stmt.where(models.JobRecord.type == type)
+        return list(self.db.scalars(stmt))
+
+
+class OutreachTemplateRepository(SqlAlchemyRepository[models.OutreachTemplate]):
+    model = models.OutreachTemplate
+
+    def list(self, *, include_archived: bool = False) -> list[models.OutreachTemplate]:
+        stmt = select(models.OutreachTemplate).order_by(models.OutreachTemplate.updated_at.desc())
+        if not include_archived:
+            stmt = stmt.where(models.OutreachTemplate.is_archived.is_(False))
+        return list(self.db.scalars(stmt))
+
+    def archive(self, entity: models.OutreachTemplate) -> models.OutreachTemplate:
+        entity.is_archived = True
+        self.db.flush()
+        return entity
+
+    def delete_archived(self) -> int:
+        result = self.db.execute(
+            delete(models.OutreachTemplate).where(models.OutreachTemplate.is_archived.is_(True))
+        )
+        self.db.flush()
+        return result.rowcount or 0

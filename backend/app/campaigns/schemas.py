@@ -1,17 +1,9 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
 from app.domain.enums import CampaignStatus
-
-
-class ApiErrorResponse(BaseModel):
-    code: str
-    message: str
-    details: dict[str, Any] | None = None
-    request_id: str | None = None
 
 
 class CampaignCreateRequest(BaseModel):

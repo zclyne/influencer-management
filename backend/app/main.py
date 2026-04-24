@@ -2,9 +2,23 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import campaigns, health, influencer_ingestion, influencers
+from app.api.errors import validation_exception_handler
+from app.api.routes import (
+    brands,
+    campaigns,
+    deals,
+    email_context,
+    exports,
+    files,
+    health,
+    influencer_ingestion,
+    influencers,
+    jobs,
+    outreach,
+)
 from app.core.config import get_settings
 from app.core.logging import configure_logging, log_startup
 
@@ -31,10 +45,18 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(influencers.router, prefix="/api/v1")
     app.include_router(influencer_ingestion.router, prefix="/api/v1")
+    app.include_router(brands.router, prefix="/api/v1")
     app.include_router(campaigns.router, prefix="/api/v1")
+    app.include_router(deals.router, prefix="/api/v1")
+    app.include_router(jobs.router, prefix="/api/v1")
+    app.include_router(files.router, prefix="/api/v1")
+    app.include_router(exports.router, prefix="/api/v1")
+    app.include_router(email_context.router, prefix="/api/v1")
+    app.include_router(outreach.router, prefix="/api/v1")
 
     return app
 

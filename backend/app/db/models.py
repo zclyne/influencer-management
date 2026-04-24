@@ -274,6 +274,51 @@ class EmailThreadLink(TimestampMixin, Base):
     deal: Mapped[Deal | None] = relationship(back_populates="email_thread_links")
 
 
+class EmailAccount(TimestampMixin, Base):
+    __tablename__ = "email_accounts"
+    __table_args__ = (
+        UniqueConstraint("provider", "email", name="uq_email_account_provider_email"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sync_status: Mapped[str] = mapped_column(String(64), default="idle")
+    last_synced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    threads: Mapped[list["EmailThreadMetadata"]] = relationship(back_populates="account")
+
+
+class EmailThreadMetadata(TimestampMixin, Base):
+    __tablename__ = "email_thread_metadata"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "external_thread_id",
+            name="uq_email_thread_metadata_provider_external_thread",
+        ),
+        Index("ix_email_thread_metadata_account_id", "account_id"),
+        Index("ix_email_thread_metadata_last_message_at", "last_message_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    external_thread_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    account_id: Mapped[str | None] = mapped_column(ForeignKey("email_accounts.id"), nullable=True)
+    subject: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    participants_json: Mapped[list[dict[str, Any]] | None] = mapped_column(SAJSON, nullable=True)
+    last_message_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
+    message_count: Mapped[int] = mapped_column(default=0)
+
+    account: Mapped[EmailAccount | None] = relationship(back_populates="threads")
+
+
 class ImportSession(TimestampMixin, Base):
     __tablename__ = "import_sessions"
     __table_args__ = (Index("ix_import_session_source", "source_type", "created_at"),)
@@ -301,3 +346,35 @@ class StoredFile(TimestampMixin, Base):
     mime_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(nullable=True)
     checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+
+class JobRecord(Base):
+    __tablename__ = "job_records"
+    __table_args__ = (
+        Index("ix_job_records_status_type", "status", "type"),
+        Index("ix_job_records_created_at", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    type: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
+    progress_current: Mapped[int] = mapped_column(default=0)
+    progress_total: Mapped[int | None] = mapped_column(nullable=True)
+    result_json: Mapped[dict[str, Any] | None] = mapped_column(SAJSON, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OutreachTemplate(TimestampMixin, Base):
+    __tablename__ = "outreach_templates"
+    __table_args__ = (Index("ix_outreach_templates_archived", "is_archived"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    subject_template: Mapped[str] = mapped_column(String(1024), nullable=False)
+    body_template: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(default=False)

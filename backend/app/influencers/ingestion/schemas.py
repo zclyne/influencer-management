@@ -139,10 +139,3 @@ class ImportSessionResponse(BaseModel):
     target_campaign_id: str | None = None
     created_at: datetime
     updated_at: datetime
-
-
-class ApiErrorResponse(BaseModel):
-    code: str
-    message: str
-    details: dict[str, Any] | None = None
-    request_id: str | None = None

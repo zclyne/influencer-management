@@ -67,3 +67,18 @@ class ImportSourceType(StrEnum):
     MODASH_CSV = "modash_csv"
     MANUAL = "manual"
 
+
+class JobStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class StoredFileKind(StrEnum):
+    IMPORT_SOURCE = "import_source"
+    CAMPAIGN_EXPORT = "campaign_export"
+    RECEIPT = "receipt"
+    EMAIL_ATTACHMENT = "email_attachment"
+    GENERATED_DOCUMENT = "generated_document"

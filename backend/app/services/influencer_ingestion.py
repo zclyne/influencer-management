@@ -27,18 +27,14 @@ from app.influencers.ingestion.schemas import (
 from app.repositories.sqlalchemy import ImportSessionRepository, InfluencerRepository
 from app.services.deals import DealService
 from app.services.dedup import DedupService
+from app.services.errors import ServiceError
 from app.services.influencer_bulk_writer import BulkInfluencerWriteCommand
 from app.services.influencers import InfluencerService
 
 
-class InfluencerIngestionServiceError(Exception):
+class InfluencerIngestionServiceError(ServiceError):
     code = "ingestion_error"
     status_code = 422
-
-    def __init__(self, message: str, details: dict[str, object] | None = None) -> None:
-        super().__init__(message)
-        self.message = message
-        self.details = details
 
 
 class UnsupportedImportFile(InfluencerIngestionServiceError):
