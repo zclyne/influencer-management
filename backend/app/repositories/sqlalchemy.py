@@ -628,23 +628,23 @@ class JobRecordRepository(SqlAlchemyRepository[models.JobRecord]):
         return list(self.db.scalars(stmt))
 
 
-class OutreachTemplateRepository(SqlAlchemyRepository[models.OutreachTemplate]):
-    model = models.OutreachTemplate
+class TemplateRepository(SqlAlchemyRepository[models.Template]):
+    model = models.Template
 
-    def list(self, *, include_archived: bool = False) -> list[models.OutreachTemplate]:
-        stmt = select(models.OutreachTemplate).order_by(models.OutreachTemplate.updated_at.desc())
+    def list(self, *, include_archived: bool = False) -> list[models.Template]:
+        stmt = select(models.Template).order_by(models.Template.updated_at.desc())
         if not include_archived:
-            stmt = stmt.where(models.OutreachTemplate.is_archived.is_(False))
+            stmt = stmt.where(models.Template.is_archived.is_(False))
         return list(self.db.scalars(stmt))
 
-    def archive(self, entity: models.OutreachTemplate) -> models.OutreachTemplate:
+    def archive(self, entity: models.Template) -> models.Template:
         entity.is_archived = True
         self.db.flush()
         return entity
 
     def delete_archived(self) -> int:
         result = self.db.execute(
-            delete(models.OutreachTemplate).where(models.OutreachTemplate.is_archived.is_(True))
+            delete(models.Template).where(models.Template.is_archived.is_(True))
         )
         self.db.flush()
         return result.rowcount or 0

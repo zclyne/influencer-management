@@ -15,6 +15,7 @@ from app.domain.enums import (
     DealStatus,
     DeliverableStatus,
     EmailLinkType,
+    TemplateType,
 )
 
 
@@ -368,11 +369,14 @@ class JobRecord(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class OutreachTemplate(TimestampMixin, Base):
-    __tablename__ = "outreach_templates"
-    __table_args__ = (Index("ix_outreach_templates_archived", "is_archived"),)
+class Template(TimestampMixin, Base):
+    __tablename__ = "templates"
+    __table_args__ = (Index("ix_templates_archived", "is_archived"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    type: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=TemplateType.OUTREACH_EMAIL.value
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     subject_template: Mapped[str] = mapped_column(String(1024), nullable=False)
     body_template: Mapped[str] = mapped_column(Text, nullable=False)

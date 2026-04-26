@@ -2,8 +2,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.domain.enums import TemplateType
 
-class OutreachTemplateCreateRequest(BaseModel):
+
+class TemplateCreateRequest(BaseModel):
+    type: TemplateType = TemplateType.OUTREACH_EMAIL
     name: str = Field(min_length=1, max_length=255)
     subject_template: str = Field(min_length=1, max_length=1024)
     body_template: str = Field(min_length=1)
@@ -18,7 +21,8 @@ class OutreachTemplateCreateRequest(BaseModel):
         return stripped
 
 
-class OutreachTemplateUpdateRequest(BaseModel):
+class TemplateUpdateRequest(BaseModel):
+    type: TemplateType | None = None
     name: str | None = Field(default=None, min_length=1, max_length=255)
     subject_template: str | None = Field(default=None, min_length=1, max_length=1024)
     body_template: str | None = Field(default=None, min_length=1)
@@ -36,8 +40,9 @@ class OutreachTemplateUpdateRequest(BaseModel):
         return stripped
 
 
-class OutreachTemplateResponse(BaseModel):
+class TemplateResponse(BaseModel):
     id: str
+    type: TemplateType
     name: str
     subject_template: str
     body_template: str
@@ -47,27 +52,5 @@ class OutreachTemplateResponse(BaseModel):
     updated_at: datetime
 
 
-class OutreachTemplateListResponse(BaseModel):
-    templates: list[OutreachTemplateResponse]
-
-
-class OutreachDraftRequest(BaseModel):
-    template_id: str
-
-
-class BulkOutreachDraftRequest(BaseModel):
-    template_id: str
-    deal_ids: list[str] = Field(default_factory=list)
-
-
-class OutreachDraftResponse(BaseModel):
-    deal_id: str
-    template_id: str
-    subject: str
-    body: str
-    to_email: str | None = None
-    warnings: list[str] = Field(default_factory=list)
-
-
-class BulkOutreachDraftResponse(BaseModel):
-    drafts: list[OutreachDraftResponse]
+class TemplateListResponse(BaseModel):
+    templates: list[TemplateResponse]

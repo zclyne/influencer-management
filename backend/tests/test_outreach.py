@@ -36,7 +36,7 @@ def _create_outreach_deal(db_session: Session, *, status: DealStatus = DealStatu
 
 def _create_template(api_client: TestClient) -> str:
     response = api_client.post(
-        "/api/v1/outreach/templates",
+        "/api/v1/templates",
         json={
             "name": "Invite",
             "subject_template": "Partnership with {{ campaign.name }}",
@@ -44,6 +44,7 @@ def _create_template(api_client: TestClient) -> str:
         },
     )
     assert response.status_code == 201
+    assert response.json()["type"] == "OUTREACH_EMAIL"
     return response.json()["id"]
 
 
@@ -66,15 +67,15 @@ def test_template_crud_and_single_draft(
     assert draft["to_email"] == "creator@example.com"
 
     patch_response = api_client.patch(
-        f"/api/v1/outreach/templates/{template_id}",
+        f"/api/v1/templates/{template_id}",
         json={"description": "Updated"},
     )
     assert patch_response.status_code == 200
     assert patch_response.json()["description"] == "Updated"
 
-    delete_response = api_client.delete(f"/api/v1/outreach/templates/{template_id}")
+    delete_response = api_client.delete(f"/api/v1/templates/{template_id}")
     assert delete_response.status_code == 204
-    assert api_client.get("/api/v1/outreach/templates").json()["templates"] == []
+    assert api_client.get("/api/v1/templates").json()["templates"] == []
 
 
 def test_unknown_template_variable_returns_validation_error(
@@ -83,7 +84,7 @@ def test_unknown_template_variable_returns_validation_error(
 ) -> None:
     _, deal = _create_outreach_deal(db_session)
     template_response = api_client.post(
-        "/api/v1/outreach/templates",
+        "/api/v1/templates",
         json={
             "name": "Bad",
             "subject_template": "{{ unknown.value }}",
@@ -99,6 +100,31 @@ def test_unknown_template_variable_returns_validation_error(
     assert response.status_code == 422
     assert response.json()["code"] == "template_render_error"
     assert response.json()["details"] == {"unknown_variables": ["unknown.value"]}
+
+
+def test_outreach_draft_rejects_non_outreach_template(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    _, deal = _create_outreach_deal(db_session)
+    template_response = api_client.post(
+        "/api/v1/templates",
+        json={
+            "type": "REPORT",
+            "name": "Report",
+            "subject_template": "Report",
+            "body_template": "Body",
+        },
+    )
+
+    response = api_client.post(
+        f"/api/v1/deals/{deal.id}/outreach-drafts",
+        json={"template_id": template_response.json()["id"]},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "template_render_error"
+    assert response.json()["details"]["template_type"] == "REPORT"
 
 
 def test_bulk_draft_returns_missing_contact_warning(

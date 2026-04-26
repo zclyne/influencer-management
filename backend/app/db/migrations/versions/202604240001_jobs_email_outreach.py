@@ -1,4 +1,4 @@
-"""add jobs email metadata and outreach templates
+"""add jobs email metadata and templates
 
 Revision ID: 202604240001
 Revises: 202604160001
@@ -23,7 +23,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     for table_name in (
-        "outreach_templates",
+        "templates",
         "job_records",
         "email_thread_metadata",
         "email_accounts",
