@@ -50,7 +50,9 @@ Rules:
 
 Current todo plan files:
 
+- `plan/todo/backend-module-structure-cleanup.md`
 - `plan/todo/contract-draft-generator-deferred.md`
+- `plan/todo/frontend-design-navigation-revision.md`
 
 Current completed plan files:
 
