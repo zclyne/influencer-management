@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.db import models
 from app.domain.enums import CompensationItemType
-from app.exports.schemas import CampaignExportFilters
 from app.repositories.sqlalchemy import CampaignRepository, DealRepository
+from app.schemas.campaign_exports import CampaignExportFilters
 
 EXPORT_COLUMNS = [
     "campaign_name",

@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 from app.api.schemas import ApiErrorResponse
 from app.db.session import get_db
 from app.domain.enums import DealStatus
-from app.exports.schemas import CampaignExportFilters
-from app.services.exports import CampaignExportService, ExportServiceError
+from app.schemas.campaign_exports import CampaignExportFilters
+from app.services.campaign_exports import CampaignExportService, ExportServiceError
 
-router = APIRouter(tags=["exports"])
+router = APIRouter(tags=["campaign exports"])
 
 
 def _http_error_response(error: ExportServiceError) -> JSONResponse:
