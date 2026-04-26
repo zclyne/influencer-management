@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.schemas import ApiErrorResponse
 from app.db.session import get_db
+from app.schemas.common import ApiErrorResponse
 from app.schemas.outreach import (
     BulkOutreachDraftRequest,
     BulkOutreachDraftResponse,

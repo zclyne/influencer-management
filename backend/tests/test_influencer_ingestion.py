@@ -14,16 +14,16 @@ from app.db.models import (
 )
 from app.enums import DealStatus, ImportSourceType
 from app.influencers.ingestion.adapters import ModashCsvImportAdapter, UnsupportedImportFileError
-from app.influencers.ingestion.schemas import (
-    ImportPreviewInput,
-    IngestionConfirmRequest,
-    IngestionConfirmRow,
-)
 from app.repositories.sqlalchemy import (
     CampaignRepository,
     DealRepository,
     InfluencerContactRepository,
     InfluencerPlatformRepository,
+)
+from app.schemas.influencer_ingestion import (
+    ImportPreviewInput,
+    IngestionConfirmRequest,
+    IngestionConfirmRow,
 )
 from app.services.influencer_ingestion import InfluencerIngestionService
 

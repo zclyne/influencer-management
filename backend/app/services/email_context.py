@@ -3,7 +3,16 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.db import models
-from app.email_context.schemas import (
+from app.enums import DealStatus, EmailLinkType
+from app.repositories.sqlalchemy import (
+    CampaignRepository,
+    DealRepository,
+    EmailThreadLinkRepository,
+    EmailThreadMetadataRepository,
+    InfluencerContactRepository,
+    InfluencerRepository,
+)
+from app.schemas.email_context import (
     EmailParticipant,
     EmailThreadCandidate,
     EmailThreadLinkCreateRequest,
@@ -16,15 +25,6 @@ from app.email_context.schemas import (
     EmailThreadMetadataResponse,
     ScopedEmailThreadListResponse,
     ScopedEmailThreadResponse,
-)
-from app.enums import DealStatus, EmailLinkType
-from app.repositories.sqlalchemy import (
-    CampaignRepository,
-    DealRepository,
-    EmailThreadLinkRepository,
-    EmailThreadMetadataRepository,
-    InfluencerContactRepository,
-    InfluencerRepository,
 )
 
 

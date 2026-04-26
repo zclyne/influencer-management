@@ -11,7 +11,8 @@ from app.influencers.ingestion.registry import (
     ImportAdapterRegistry,
     UnsupportedImportSourceError,
 )
-from app.influencers.ingestion.schemas import (
+from app.repositories.sqlalchemy import ImportSessionRepository, InfluencerRepository
+from app.schemas.influencer_ingestion import (
     CanonicalInfluencerRow,
     ContactCandidate,
     DedupMatch,
@@ -24,7 +25,6 @@ from app.influencers.ingestion.schemas import (
     IngestionRowResult,
     SocialLinkCandidate,
 )
-from app.repositories.sqlalchemy import ImportSessionRepository, InfluencerRepository
 from app.services.deals import DealService
 from app.services.dedup import DedupService
 from app.services.errors import ServiceError

@@ -2,7 +2,10 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.campaigns.schemas import (
+from app.db import models
+from app.enums import CampaignStatus
+from app.repositories.sqlalchemy import BrandRepository, CampaignBrandRepository, CampaignRepository
+from app.schemas.campaigns import (
     BrandSummary,
     CampaignBrandResponse,
     CampaignBrandUpdateRequest,
@@ -11,9 +14,6 @@ from app.campaigns.schemas import (
     CampaignResponse,
     CampaignUpdateRequest,
 )
-from app.db import models
-from app.enums import CampaignStatus
-from app.repositories.sqlalchemy import BrandRepository, CampaignBrandRepository, CampaignRepository
 from app.services.errors import ServiceError
 
 

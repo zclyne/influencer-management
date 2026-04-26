@@ -14,7 +14,7 @@ from app.influencers.ingestion.normalization import (
     parse_percentage_or_rate,
     parse_ranked_key_value,
 )
-from app.influencers.ingestion.schemas import (
+from app.schemas.influencer_ingestion import (
     CanonicalInfluencerRow,
     ContactCandidate,
     ImportPreviewInput,

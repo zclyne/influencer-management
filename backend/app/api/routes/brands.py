@@ -5,13 +5,13 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.errors import ERROR_RESPONSES, service_error_response
-from app.brands.schemas import (
+from app.db.session import get_db
+from app.schemas.brands import (
     BrandCreateRequest,
     BrandListResponse,
     BrandResponse,
     BrandUpdateRequest,
 )
-from app.db.session import get_db
 from app.services.brands import BrandService, BrandServiceError
 
 router = APIRouter(prefix="/brands", tags=["brands"])

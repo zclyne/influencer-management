@@ -1,13 +1,13 @@
 from sqlalchemy.orm import Session
 
-from app.brands.schemas import (
+from app.db import models
+from app.repositories.sqlalchemy import BrandRepository
+from app.schemas.brands import (
     BrandCreateRequest,
     BrandListResponse,
     BrandResponse,
     BrandUpdateRequest,
 )
-from app.db import models
-from app.repositories.sqlalchemy import BrandRepository
 from app.services.errors import ServiceError
 
 

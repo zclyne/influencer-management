@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from app.db import models
 from app.db.models import uuid_str
 from app.enums import StoredFileKind
-from app.files.schemas import StoredFileResponse
 from app.repositories.sqlalchemy import StoredFileRepository
+from app.schemas.files import StoredFileResponse
 from app.storage.files import ManagedFileStorage
 
 
