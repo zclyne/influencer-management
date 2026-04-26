@@ -3,14 +3,14 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.db import models
-from app.deliverables.schemas import (
+from app.enums import DeliverableStatus
+from app.repositories.sqlalchemy import DealRepository, DeliverableRepository
+from app.schemas.deliverables import (
     DeliverableCreateRequest,
     DeliverableListResponse,
     DeliverableResponse,
     DeliverableUpdateRequest,
 )
-from app.enums import DeliverableStatus
-from app.repositories.sqlalchemy import DealRepository, DeliverableRepository
 from app.services.deals import DealNotFound, DealServiceError
 
 

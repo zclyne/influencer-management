@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.errors import ERROR_RESPONSES, service_error_response
 from app.db.session import get_db
 from app.enums import ImportSourceType
-from app.influencers.ingestion.schemas import (
+from app.schemas.influencer_ingestion import (
     ImportPreviewInput,
     ImportSessionResponse,
     IngestionConfirmRequest,

@@ -7,7 +7,14 @@ from sqlalchemy.orm import Session
 
 from app.db import models
 from app.db.models import utc_now
-from app.deals.schemas import (
+from app.enums import (
+    CompensationItemStatus,
+    CompensationItemType,
+    DealStatus,
+    DeliverableStatus,
+)
+from app.repositories.sqlalchemy import CampaignRepository, DealRepository, InfluencerRepository
+from app.schemas.deals import (
     CompensationSummary,
     DealBulkCreateRequest,
     DealBulkCreateResponse,
@@ -26,13 +33,6 @@ from app.deals.schemas import (
     PrimaryContactSummary,
     PrimaryPlatformSummary,
 )
-from app.enums import (
-    CompensationItemStatus,
-    CompensationItemType,
-    DealStatus,
-    DeliverableStatus,
-)
-from app.repositories.sqlalchemy import CampaignRepository, DealRepository, InfluencerRepository
 
 
 class DealServiceError(Exception):

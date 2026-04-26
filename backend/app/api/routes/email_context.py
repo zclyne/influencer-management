@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.schemas import ApiErrorResponse
 from app.db.session import get_db
-from app.email_context.schemas import (
+from app.schemas.common import ApiErrorResponse
+from app.schemas.email_context import (
     EmailThreadLinkCreateRequest,
     EmailThreadLinkListResponse,
     EmailThreadLinkResponse,

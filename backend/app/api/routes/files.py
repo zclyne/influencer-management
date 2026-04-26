@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, Response, status
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.schemas import ApiErrorResponse
 from app.db.session import get_db
-from app.files.schemas import StoredFileResponse
+from app.schemas.common import ApiErrorResponse
+from app.schemas.files import StoredFileResponse
 from app.services.files import FileService, FileServiceError
 
 router = APIRouter(prefix="/files", tags=["files"])

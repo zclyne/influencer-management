@@ -8,8 +8,14 @@ from app.influencers.ingestion.normalization import (
     normalize_profile_url,
     normalize_username,
 )
-from app.influencers.ingestion.schemas import CanonicalInfluencerRow, ContactCandidate
-from app.influencers.schemas import (
+from app.repositories.sqlalchemy import (
+    DealRepository,
+    InfluencerContactRepository,
+    InfluencerPlatformRepository,
+    InfluencerRepository,
+)
+from app.schemas.influencer_ingestion import CanonicalInfluencerRow, ContactCandidate
+from app.schemas.influencers import (
     InfluencerContactCreateRequest,
     InfluencerContactListResponse,
     InfluencerContactResponse,
@@ -26,12 +32,6 @@ from app.influencers.schemas import (
     InfluencerResponse,
     InfluencerUpdateRequest,
     ManualInfluencerInput,
-)
-from app.repositories.sqlalchemy import (
-    DealRepository,
-    InfluencerContactRepository,
-    InfluencerPlatformRepository,
-    InfluencerRepository,
 )
 from app.services.deals import DealService
 from app.services.dedup import DedupService

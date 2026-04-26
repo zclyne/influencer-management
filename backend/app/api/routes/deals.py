@@ -4,14 +4,15 @@ from fastapi import APIRouter, Depends, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.compensation.schemas import (
+from app.db.session import get_db
+from app.enums import DealStatus
+from app.schemas.compensation import (
     CompensationItemCreateRequest,
     CompensationItemListResponse,
     CompensationItemResponse,
     CompensationItemUpdateRequest,
 )
-from app.db.session import get_db
-from app.deals.schemas import (
+from app.schemas.deals import (
     ApiErrorResponse,
     DealBulkCreateRequest,
     DealBulkCreateResponse,
@@ -22,13 +23,12 @@ from app.deals.schemas import (
     DealListResponse,
     DealUpdateRequest,
 )
-from app.deliverables.schemas import (
+from app.schemas.deliverables import (
     DeliverableCreateRequest,
     DeliverableListResponse,
     DeliverableResponse,
     DeliverableUpdateRequest,
 )
-from app.enums import DealStatus
 from app.services.compensation import CompensationItemService
 from app.services.deals import DealService, DealServiceError
 from app.services.deliverables import DeliverableService

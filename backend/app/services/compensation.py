@@ -2,15 +2,15 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.compensation.schemas import (
+from app.db import models
+from app.enums import CompensationItemStatus, CompensationItemType
+from app.repositories.sqlalchemy import CompensationItemRepository, DealRepository
+from app.schemas.compensation import (
     CompensationItemCreateRequest,
     CompensationItemListResponse,
     CompensationItemResponse,
     CompensationItemUpdateRequest,
 )
-from app.db import models
-from app.enums import CompensationItemStatus, CompensationItemType
-from app.repositories.sqlalchemy import CompensationItemRepository, DealRepository
 from app.services.deals import DealNotFound, DealServiceError, mark_completed_at_if_needed
 from app.services.deliverables import ArchivedDealMutation
 

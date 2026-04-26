@@ -1,11 +1,11 @@
 from sqlalchemy.orm import Session
 
-from app.influencers.ingestion.schemas import CanonicalInfluencerRow, DedupMatch
 from app.repositories.sqlalchemy import (
     InfluencerContactRepository,
     InfluencerPlatformRepository,
     InfluencerRepository,
 )
+from app.schemas.influencer_ingestion import CanonicalInfluencerRow, DedupMatch
 
 
 class DedupService:

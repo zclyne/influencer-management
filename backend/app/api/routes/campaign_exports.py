@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
-from app.api.schemas import ApiErrorResponse
 from app.db.session import get_db
 from app.enums import DealStatus
 from app.schemas.campaign_exports import CampaignExportFilters
+from app.schemas.common import ApiErrorResponse
 from app.services.campaign_exports import CampaignExportService, ExportServiceError
 
 router = APIRouter(tags=["campaign exports"])

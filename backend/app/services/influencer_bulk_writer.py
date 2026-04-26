@@ -8,13 +8,13 @@ from sqlalchemy.orm import Session
 from app.db import models
 from app.db.models import utc_now
 from app.influencers.ingestion.normalization import normalize_profile_url, normalize_username
-from app.influencers.ingestion.schemas import CanonicalInfluencerRow, ContactCandidate
 from app.repositories.sqlalchemy import (
     InfluencerAudienceSnapshotRepository,
     InfluencerContactRepository,
     InfluencerPlatformRepository,
     InfluencerRepository,
 )
+from app.schemas.influencer_ingestion import CanonicalInfluencerRow, ContactCandidate
 
 BulkWriteAction = Literal["create", "merge"]
 BulkWriteStatus = Literal["created", "merged", "failed"]

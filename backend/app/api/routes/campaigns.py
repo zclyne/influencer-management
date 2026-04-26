@@ -5,7 +5,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.errors import ERROR_RESPONSES, service_error_response
-from app.campaigns.schemas import (
+from app.db.session import get_db
+from app.enums import CampaignStatus
+from app.schemas.campaigns import (
     CampaignBrandLinkRequest,
     CampaignBrandResponse,
     CampaignBrandUpdateRequest,
@@ -14,8 +16,6 @@ from app.campaigns.schemas import (
     CampaignResponse,
     CampaignUpdateRequest,
 )
-from app.db.session import get_db
-from app.enums import CampaignStatus
 from app.services.campaigns import CampaignService, CampaignServiceError
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
