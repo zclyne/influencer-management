@@ -50,7 +50,6 @@ Rules:
 
 Current todo plan files:
 
-- `plan/todo/backend-module-structure-cleanup.md`
 - `plan/todo/contract-draft-generator-deferred.md`
 - `plan/todo/frontend-design-navigation-revision.md`
 
@@ -58,6 +57,7 @@ Current completed plan files:
 
 - `plan/completed/api-contract-and-errors.md`
 - `plan/completed/background-jobs-observability.md`
+- `plan/completed/backend-module-structure-cleanup.md`
 - `plan/completed/brand-management.md`
 - `plan/completed/compensation-cost-items.md`
 - `plan/completed/deal-pipeline-management.md`
@@ -74,7 +74,7 @@ Current completed plan files:
 Implemented or mostly implemented:
 
 - Backend FastAPI app with `/api/v1` route prefix.
-- SQLAlchemy models and Alembic migrations for core MVP tables, jobs, email metadata, and outreach templates.
+- SQLAlchemy models and Alembic migrations for core MVP tables, jobs, email metadata, and generic templates.
 - Repository implementations for core models.
 - Influencer ingestion/import flow for Modash CSV preview and confirm.
 - InfluencerBulkWriter for batch influencer graph writes.
@@ -87,13 +87,13 @@ Implemented or mostly implemented:
 - Deliverable APIs.
 - CompensationItem APIs and summaries.
 - Email Context and Linking service.
-- Outreach template drafting.
-- Export/reporting.
+- Generic Template CRUD and outreach draft rendering.
+- Campaign-scoped export/reporting.
 - Background job API and persisted job records.
 - Local file management service.
 - Unified API error model and OpenAPI export helper.
 - Initial Vue/Electron frontend workbench.
-- Backend tests for health, data model, influencer ingestion, campaigns, brands, influencers, deals, deliverables, compensation, jobs/files, exports, email context, and outreach.
+- Backend tests for health, data model, influencer ingestion, campaigns, brands, influencers, deals, deliverables, compensation, jobs/files, campaign exports, email context, templates, and outreach.
 
 Not yet complete:
 
@@ -250,7 +250,7 @@ Do not add:
 - contract-specific Deal fields.
 - contract generation tasks.
 
-Keep Deliverables, CompensationItems, Local File Management, and Outreach clean enough that a future contract renderer can consume them.
+Keep Deliverables, CompensationItems, Local File Management, Templates, and Outreach clean enough that a future contract renderer can consume them.
 
 ## Backend Commands
 
@@ -308,7 +308,7 @@ For docs-only changes:
 - Python target is 3.12.
 - Backend formatting/linting follows Ruff with line length 100.
 - Prefer SQLAlchemy 2.x typed ORM style already used in `backend/app/db/models.py`.
-- Keep request/response schemas close to their domain package.
+- Keep request/response schemas under `backend/app/schemas/`.
 - Keep services in `backend/app/services/` unless a module grows enough to justify a local service package.
 - Keep API route modules in `backend/app/api/routes/`.
 - Use existing normalization helpers before adding new parsing logic.

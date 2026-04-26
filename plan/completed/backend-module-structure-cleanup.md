@@ -2,12 +2,19 @@
 
 ## Status
 
-- New plan.
-- This plan captures backend structure issues found after the export, template/outreach, shared enum, and schema package discussions.
-- The goal is to make package names match the actual architecture and product boundaries without changing business behavior beyond intentional breaking API/model renames.
-- Each fix must be implemented on its own branch, verified, merged back to `main`, and then the next branch must start from the updated `main`.
+- Completed.
+- Implemented across four separate branches and merged back to `main`.
+- Final verification passed on `main` with:
+  - `uv run alembic upgrade head`
+  - `uv run pytest`
+  - `uv run ruff check .`
 
-When all fixes are implemented, verified, merged to `main`, and accepted, move this file to `plan/completed/backend-module-structure-cleanup.md`.
+Completed branches:
+
+- `refactor/campaign-export-boundary`
+- `refactor/templates-module`
+- `refactor/shared-enums`
+- `refactor/schemas-package`
 
 ## Current Problems
 
