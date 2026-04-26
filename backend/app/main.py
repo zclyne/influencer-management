@@ -8,10 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.errors import validation_exception_handler
 from app.api.routes import (
     brands,
+    campaign_exports,
     campaigns,
     deals,
     email_context,
-    exports,
     files,
     health,
     influencer_ingestion,
@@ -54,7 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(deals.router, prefix="/api/v1")
     app.include_router(jobs.router, prefix="/api/v1")
     app.include_router(files.router, prefix="/api/v1")
-    app.include_router(exports.router, prefix="/api/v1")
+    app.include_router(campaign_exports.router, prefix="/api/v1")
     app.include_router(email_context.router, prefix="/api/v1")
     app.include_router(outreach.router, prefix="/api/v1")
 
