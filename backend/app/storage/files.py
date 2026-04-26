@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.domain.enums import StoredFileKind
+from app.enums import StoredFileKind
 
 KIND_DIRECTORIES = {
     StoredFileKind.IMPORT_SOURCE: "imports",

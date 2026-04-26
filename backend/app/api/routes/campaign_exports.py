@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.schemas import ApiErrorResponse
 from app.db.session import get_db
-from app.domain.enums import DealStatus
+from app.enums import DealStatus
 from app.schemas.campaign_exports import CampaignExportFilters
 from app.services.campaign_exports import CampaignExportService, ExportServiceError
 

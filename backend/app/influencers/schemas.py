@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.domain.enums import ContactRole
+from app.enums import ContactRole
 
 
 class ManualInfluencerInput(BaseModel):

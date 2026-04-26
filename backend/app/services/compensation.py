@@ -9,7 +9,7 @@ from app.compensation.schemas import (
     CompensationItemUpdateRequest,
 )
 from app.db import models
-from app.domain.enums import CompensationItemStatus, CompensationItemType
+from app.enums import CompensationItemStatus, CompensationItemType
 from app.repositories.sqlalchemy import CompensationItemRepository, DealRepository
 from app.services.deals import DealNotFound, DealServiceError, mark_completed_at_if_needed
 from app.services.deliverables import ArchivedDealMutation

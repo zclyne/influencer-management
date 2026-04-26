@@ -9,7 +9,7 @@ from app.deliverables.schemas import (
     DeliverableResponse,
     DeliverableUpdateRequest,
 )
-from app.domain.enums import DeliverableStatus
+from app.enums import DeliverableStatus
 from app.repositories.sqlalchemy import DealRepository, DeliverableRepository
 from app.services.deals import DealNotFound, DealServiceError
 

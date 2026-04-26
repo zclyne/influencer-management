@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Campaign, CampaignBrand
-from app.domain.enums import CampaignStatus
+from app.enums import CampaignStatus
 from app.repositories.sqlalchemy import BrandRepository, CampaignRepository
 
 

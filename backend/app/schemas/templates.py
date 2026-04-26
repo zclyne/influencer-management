@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.domain.enums import TemplateType
+from app.enums import TemplateType
 
 
 class TemplateCreateRequest(BaseModel):

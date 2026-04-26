@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from app.domain.enums import EmailLinkType
+from app.enums import EmailLinkType
 
 
 class EmailParticipant(BaseModel):

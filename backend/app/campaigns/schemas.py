@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.domain.enums import CampaignStatus
+from app.enums import CampaignStatus
 
 
 class CampaignCreateRequest(BaseModel):

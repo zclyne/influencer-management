@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.domain.enums import CompensationItemStatus, CompensationItemType
+from app.enums import CompensationItemStatus, CompensationItemType
 
 
 class CompensationItemCreateRequest(BaseModel):

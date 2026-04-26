@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.domain.enums import DeliverableStatus
+from app.enums import DeliverableStatus
 from app.repositories.sqlalchemy import (
     CampaignRepository,
     DealRepository,

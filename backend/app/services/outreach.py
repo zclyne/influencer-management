@@ -5,7 +5,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.db import models
-from app.domain.enums import CompensationItemType, DealStatus, TemplateType
+from app.enums import CompensationItemType, DealStatus, TemplateType
 from app.repositories.sqlalchemy import (
     CampaignRepository,
     DealRepository,

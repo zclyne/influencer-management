@@ -28,7 +28,7 @@ from app.deliverables.schemas import (
     DeliverableResponse,
     DeliverableUpdateRequest,
 )
-from app.domain.enums import DealStatus
+from app.enums import DealStatus
 from app.services.compensation import CompensationItemService
 from app.services.deals import DealService, DealServiceError
 from app.services.deliverables import DeliverableService

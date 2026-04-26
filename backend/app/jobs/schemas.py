@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.domain.enums import JobStatus
+from app.enums import JobStatus
 
 
 class JobRecordResponse(BaseModel):

@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.domain.enums import CompensationItemType
+from app.enums import CompensationItemType
 from app.repositories.sqlalchemy import (
     BrandRepository,
     CampaignBrandRepository,
