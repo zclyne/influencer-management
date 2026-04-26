@@ -18,6 +18,7 @@ from app.api.routes import (
     influencers,
     jobs,
     outreach,
+    templates,
 )
 from app.core.config import get_settings
 from app.core.logging import configure_logging, log_startup
@@ -56,6 +57,7 @@ def create_app() -> FastAPI:
     app.include_router(files.router, prefix="/api/v1")
     app.include_router(campaign_exports.router, prefix="/api/v1")
     app.include_router(email_context.router, prefix="/api/v1")
+    app.include_router(templates.router, prefix="/api/v1")
     app.include_router(outreach.router, prefix="/api/v1")
 
     return app

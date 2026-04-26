@@ -5,21 +5,17 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.db import models
-from app.domain.enums import CompensationItemType, DealStatus
-from app.outreach.schemas import (
+from app.domain.enums import CompensationItemType, DealStatus, TemplateType
+from app.repositories.sqlalchemy import (
+    CampaignRepository,
+    DealRepository,
+    TemplateRepository,
+)
+from app.schemas.outreach import (
     BulkOutreachDraftRequest,
     BulkOutreachDraftResponse,
     OutreachDraftRequest,
     OutreachDraftResponse,
-    OutreachTemplateCreateRequest,
-    OutreachTemplateListResponse,
-    OutreachTemplateResponse,
-    OutreachTemplateUpdateRequest,
-)
-from app.repositories.sqlalchemy import (
-    CampaignRepository,
-    DealRepository,
-    OutreachTemplateRepository,
 )
 
 VARIABLE_RE = re.compile(r"{{\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*}}")
@@ -61,42 +57,9 @@ class RenderContext:
 class OutreachService:
     def __init__(self, db: Session) -> None:
         self.db = db
-        self.templates = OutreachTemplateRepository(db)
+        self.templates = TemplateRepository(db)
         self.deals = DealRepository(db)
         self.campaigns = CampaignRepository(db)
-
-    def list_templates(self, *, include_archived: bool = False) -> OutreachTemplateListResponse:
-        return OutreachTemplateListResponse(
-            templates=[
-                self._template_response(template)
-                for template in self.templates.list(include_archived=include_archived)
-            ]
-        )
-
-    def create_template(
-        self, payload: OutreachTemplateCreateRequest
-    ) -> OutreachTemplateResponse:
-        template = self.templates.create(**payload.model_dump())
-        self.db.commit()
-        return self._template_response(template)
-
-    def get_template(self, template_id: str) -> OutreachTemplateResponse:
-        return self._template_response(self._require_template(template_id))
-
-    def update_template(
-        self, template_id: str, payload: OutreachTemplateUpdateRequest
-    ) -> OutreachTemplateResponse:
-        template = self._require_template(template_id)
-        values = payload.model_dump(exclude_unset=True)
-        if values:
-            template = self.templates.update(template, **values)
-            self.db.commit()
-        return self._template_response(template)
-
-    def archive_template(self, template_id: str) -> None:
-        template = self._require_template(template_id)
-        self.templates.archive(template)
-        self.db.commit()
 
     def render_deal_draft(
         self, deal_id: str, payload: OutreachDraftRequest
@@ -135,7 +98,7 @@ class OutreachService:
         )
 
     def _render_draft(
-        self, deal: models.Deal, template: models.OutreachTemplate
+        self, deal: models.Deal, template: models.Template
     ) -> OutreachDraftResponse:
         context = self._build_context(deal)
         subject = self._render_template(template.subject_template, context.values)
@@ -198,11 +161,16 @@ class OutreachService:
         }
         return RenderContext(values=values, warnings=warnings)
 
-    def _require_template(self, template_id: str) -> models.OutreachTemplate:
+    def _require_template(self, template_id: str) -> models.Template:
         template = self.templates.get(template_id)
         if not template:
             raise OutreachNotFound(
-                "Outreach template not found.", details={"template_id": template_id}
+                "Template not found.", details={"template_id": template_id}
+            )
+        if template.type != TemplateType.OUTREACH_EMAIL.value:
+            raise TemplateRenderError(
+                "Template is not an outreach email template.",
+                details={"template_id": template_id, "template_type": template.type},
             )
         return template
 
@@ -244,15 +212,3 @@ class OutreachService:
                 label = f"{label}{amount}"
             parts.append(label)
         return "; ".join(parts)
-
-    def _template_response(self, template: models.OutreachTemplate) -> OutreachTemplateResponse:
-        return OutreachTemplateResponse(
-            id=template.id,
-            name=template.name,
-            subject_template=template.subject_template,
-            body_template=template.body_template,
-            description=template.description,
-            is_archived=template.is_archived,
-            created_at=template.created_at,
-            updated_at=template.updated_at,
-        )

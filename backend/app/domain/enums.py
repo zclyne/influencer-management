@@ -63,6 +63,14 @@ class EmailLinkType(StrEnum):
     IMPORTED = "imported"
 
 
+class TemplateType(StrEnum):
+    OUTREACH_EMAIL = "OUTREACH_EMAIL"
+    CONTRACT = "CONTRACT"
+    REPORT = "REPORT"
+    BRIEF = "BRIEF"
+    OTHER = "OTHER"
+
+
 class ImportSourceType(StrEnum):
     MODASH_CSV = "modash_csv"
     MANUAL = "manual"
