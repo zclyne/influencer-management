@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.schemas import ApiErrorResponse
 from app.db.session import get_db
-from app.domain.enums import JobStatus
+from app.enums import JobStatus
 from app.jobs.schemas import JobListResponse, JobRecordResponse
 from app.services.jobs import JobService, JobServiceError
 

@@ -4,7 +4,7 @@ from io import StringIO
 from sqlalchemy.orm import Session
 
 from app.db import models
-from app.domain.enums import CompensationItemType
+from app.enums import CompensationItemType
 from app.repositories.sqlalchemy import CampaignRepository, DealRepository
 from app.schemas.campaign_exports import CampaignExportFilters
 

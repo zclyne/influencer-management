@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.domain.enums import DealStatus
+from app.enums import DealStatus
 
 
 class ApiErrorResponse(BaseModel):

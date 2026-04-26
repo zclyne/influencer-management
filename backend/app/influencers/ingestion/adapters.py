@@ -3,7 +3,7 @@ from collections.abc import Iterable
 from io import StringIO
 from typing import Any, Protocol
 
-from app.domain.enums import ImportSourceType
+from app.enums import ImportSourceType
 from app.influencers.ingestion.normalization import (
     extract_emails,
     normalize_email,

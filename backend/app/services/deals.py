@@ -26,7 +26,7 @@ from app.deals.schemas import (
     PrimaryContactSummary,
     PrimaryPlatformSummary,
 )
-from app.domain.enums import (
+from app.enums import (
     CompensationItemStatus,
     CompensationItemType,
     DealStatus,

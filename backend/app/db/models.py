@@ -7,7 +7,7 @@ from sqlalchemy import JSON as SAJSON
 from sqlalchemy import Date, DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from app.domain.enums import (
+from app.enums import (
     CampaignStatus,
     CompensationItemStatus,
     CompensationItemType,

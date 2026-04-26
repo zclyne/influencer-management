@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db import models
 from app.db.models import uuid_str
-from app.domain.enums import StoredFileKind
+from app.enums import StoredFileKind
 from app.files.schemas import StoredFileResponse
 from app.repositories.sqlalchemy import StoredFileRepository
 from app.storage.files import ManagedFileStorage

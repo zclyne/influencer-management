@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from app.domain.enums import DealStatus
+from app.enums import DealStatus
 
 
 class CampaignExportFilters(BaseModel):

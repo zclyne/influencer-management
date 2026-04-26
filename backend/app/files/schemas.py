@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from app.domain.enums import StoredFileKind
+from app.enums import StoredFileKind
 
 
 class StoredFileResponse(BaseModel):

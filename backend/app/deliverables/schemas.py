@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
-from app.domain.enums import DeliverableStatus
+from app.enums import DeliverableStatus
 
 
 class DeliverableCreateRequest(BaseModel):

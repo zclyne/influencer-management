@@ -12,7 +12,7 @@ from app.db.models import (
     InfluencerContact,
     InfluencerPlatform,
 )
-from app.domain.enums import DealStatus, ImportSourceType
+from app.enums import DealStatus, ImportSourceType
 from app.influencers.ingestion.adapters import ModashCsvImportAdapter, UnsupportedImportFileError
 from app.influencers.ingestion.schemas import (
     ImportPreviewInput,

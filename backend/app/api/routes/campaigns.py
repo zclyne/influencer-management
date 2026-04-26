@@ -15,7 +15,7 @@ from app.campaigns.schemas import (
     CampaignUpdateRequest,
 )
 from app.db.session import get_db
-from app.domain.enums import CampaignStatus
+from app.enums import CampaignStatus
 from app.services.campaigns import CampaignService, CampaignServiceError
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])

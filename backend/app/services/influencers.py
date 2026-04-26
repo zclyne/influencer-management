@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.db import models
-from app.domain.enums import ContactRole, ImportSourceType
+from app.enums import ContactRole, ImportSourceType
 from app.influencers.ingestion.normalization import (
     normalize_email,
     normalize_platform,

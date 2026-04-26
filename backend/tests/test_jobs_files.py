@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.domain.enums import JobStatus, StoredFileKind
+from app.enums import JobStatus, StoredFileKind
 from app.services.files import FileService, ManagedFileMissing
 from app.services.jobs import JobService
 from app.storage.files import ManagedFileStorage

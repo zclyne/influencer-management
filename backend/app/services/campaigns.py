@@ -12,7 +12,7 @@ from app.campaigns.schemas import (
     CampaignUpdateRequest,
 )
 from app.db import models
-from app.domain.enums import CampaignStatus
+from app.enums import CampaignStatus
 from app.repositories.sqlalchemy import BrandRepository, CampaignBrandRepository, CampaignRepository
 from app.services.errors import ServiceError
 

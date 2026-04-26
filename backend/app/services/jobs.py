@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db import models
 from app.db.models import utc_now
-from app.domain.enums import JobStatus
+from app.enums import JobStatus
 from app.jobs.schemas import JobListResponse, JobRecordResponse
 from app.repositories.sqlalchemy import JobRecordRepository
 

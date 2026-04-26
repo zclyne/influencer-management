@@ -4,7 +4,7 @@ from io import StringIO
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.domain.enums import CompensationItemType, DealStatus
+from app.enums import CompensationItemType, DealStatus
 from app.repositories.sqlalchemy import (
     BrandRepository,
     CampaignBrandRepository,

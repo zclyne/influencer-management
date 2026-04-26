@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.domain.enums import ImportSourceType
+from app.enums import ImportSourceType
 
 IngestionRowStatus = Literal[
     "pending",

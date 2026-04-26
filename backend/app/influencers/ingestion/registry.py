@@ -1,4 +1,4 @@
-from app.domain.enums import ImportSourceType
+from app.enums import ImportSourceType
 from app.influencers.ingestion.adapters import InfluencerImportAdapter, ModashCsvImportAdapter
 
 
