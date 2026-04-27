@@ -26,6 +26,25 @@ When this design revision is implemented in Figma and reflected in frontend code
 5. Frontend design should be easy to implement with existing frameworks.
    The design should avoid custom component systems or bespoke complex widgets when mature framework components can do the job.
 
+6. Do not design a full standalone Email page yet.
+   Email context is important to the product, but the current UI direction is not ready. Keep only a placeholder in navigation/design until the workflow is rethought.
+
+7. Influencer and Deal screens must show multi-platform creators.
+   A creator can have Instagram, TikTok, YouTube, Threads, and other platform identities. Do not design these screens as if each influencer only has one platform.
+
+8. Influencer detail is a standalone page.
+   Clicking an influencer in the Influencer Library should navigate to the Influencer Detail page. Deal screens that link to an influencer profile must reuse the same Influencer Detail page, not a separate deal-specific profile view.
+
+9. Tables need standard deletion affordances.
+   Data tables should use framework table row selection for multi-select deletion and a rightmost actions column for single-row delete. Do not design custom deletion controls outside the table unless the table component cannot support the interaction.
+   Destructive table actions should open a confirmation modal or provide an undo window; do not imply immediate silent deletion.
+
+10. Import Wizard should not duplicate preview as both a stage and a panel.
+    The preview result table is the preview surface. Do not add a separate top-level `Preview result` stage/card that repeats the same state.
+
+11. Import Wizard should optimize for preview review after upload.
+    The upload control should collapse to a compact file status row after a file is selected. Use the main page area for the preview table, row decisions, filters, row removal, and confirm actions.
+
 ## Product Interpretation
 
 The product remains campaign-first:
@@ -50,7 +69,7 @@ Primary sidebar should use:
 
 - `Influencers`
   - Subtitle: `Library and import`
-  - Contains global influencer library, manual add, platform/contact editing, duplicate review, and Modash import.
+  - Contains global influencer library, manual add, platform/contact editing, and Modash import.
   - Import should appear as a sub-tab/action inside this section, not as a standalone sidebar item.
 
 - `Brands`
@@ -60,7 +79,8 @@ Primary sidebar should use:
 
 - `Email`
   - Subtitle: `Thread context`
-  - Handles manual link/unlink, contact matching, and thread candidates.
+  - Placeholder only for now.
+  - Do not design the full Email page until the email workflow is revisited.
 
 - `Templates`
   - Subtitle: `Reusable docs`
@@ -81,6 +101,9 @@ Design implications:
 - Keep interaction states easy to map to Vue components and API state.
 - Avoid designing bespoke controls that would require a custom component system before the product workflow is validated.
 - Keep dense table interactions practical: stable row height, selectable rows, sortable columns, simple filter chips, and a right-side detail drawer.
+- Use table row selection for bulk delete and a fixed/rightmost actions column for per-row delete.
+- Use clickable primary entity cells for navigation to detail pages, rather than making an entire row ambiguously clickable.
+- Do not use a side preview on Influencer Library that competes with the standalone Influencer Detail page.
 - Treat advanced table capabilities as incremental enhancements, not first-pass requirements.
 
 Suitable implementation directions:
@@ -125,10 +148,14 @@ Update the existing Figma file:
   - `Library`
   - `Import CSV`
   - `Add manually`
-  - `Duplicate review` or `Import sessions`, if useful.
+  - multi-platform platform display and editing.
+- Add an Influencer Detail page that is reached from Influencer Library row clicks and Deal profile links.
 - Add Import Wizard as a nested Influencers view, visually connected to the library.
+- In Import Wizard, keep preview as the main result panel, not as a duplicated top workflow card.
+- In Import Wizard, do not keep upload and preview as large side-by-side panels after upload; use a compact uploaded-file row and dedicate the page to preview review.
 - Add a short annotation near Campaign export explaining that export is campaign-contextual.
 - Keep all designed controls implementable with existing UI framework primitives.
+- Keep Email as a placeholder only.
 
 Keep the current visual direction:
 
@@ -154,10 +181,15 @@ Expected code behavior:
 - Remove top-level `exports` navigation item.
 - Keep import flow reachable from:
   - Influencer Library action.
-  - Campaign Workspace `Import creators` action with target campaign preselected.
 - Rename Templates subtitle to avoid outreach-only wording.
 - Keep campaign export as an action, not a route.
 - Treat export API integration as Campaign Workspace behavior.
+- In Campaign Workspace, add creators by selecting from the existing Influencer Library; adding an influencer to a campaign creates a Deal.
+- Do not add a Campaign-level import action.
+- In data tables, include row selection and a rightmost delete action column.
+- Influencer Library row primary link navigates to the shared Influencer Detail page.
+- Influencer Library should be table-first; avoid a right-side profile preview because the profile is a standalone page.
+- Delete and bulk delete actions must show confirmation or undo behavior in implementation.
 - Use existing framework table, drawer, form, modal, dropdown, tab, and notification primitives wherever possible.
 
 ## Open Questions
@@ -166,6 +198,7 @@ Expected code behavior:
 - Should `Templates` be top-level now, or should it wait until more than outreach templates exist?
 - Should import sessions/history be visible under Influencers, or only after a user imports?
 - Should export history be stored and visible, or should MVP only download generated CSV immediately?
+- What is the correct standalone Email workflow beyond deal/influencer email context placeholders?
 - Which UI framework should be standardized for the Vue frontend before implementing the revised design?
 
 ## Done Criteria
@@ -176,6 +209,12 @@ Expected code behavior:
 - Import Wizard is visually nested under Influencers.
 - Campaign export is shown as a contextual action.
 - Export is treated as a Campaign sub-feature in both design and code.
+- Email page remains a placeholder, not a full workflow screen.
+- Influencer and Deal screens show creators with multiple platforms.
+- Influencer Detail exists as a standalone page and is reused by Deal profile links.
+- Tables expose single-row delete and multi-select delete via framework table primitives.
+- Import Wizard does not duplicate preview in both the workflow header and the main preview table.
+- Import Wizard uses most of the page for preview results after upload.
 - Design can be implemented with existing Vue/UI framework primitives without building a large custom component library first.
 - Frontend code navigation matches the revised Figma design.
 - `bun run typecheck` and `bun run build` pass after code changes.
