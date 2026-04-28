@@ -1,29 +1,31 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { apiRoot, createCampaign, errorMessage, listCampaigns } from './api/client'
-import type { CampaignCreateRequest, CampaignResponse, WorkbenchDeal } from './api/types'
-import { navigationItems, type WorkbenchView } from './app/navigation'
-import CampaignWorkspace from './campaigns/CampaignWorkspace.vue'
-import DealDetailDrawer from './deals/DealDetailDrawer.vue'
-import ImportWizard from './ingestion/ImportWizard.vue'
-import InfluencerLibrary from './influencers/InfluencerLibrary.vue'
+import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { apiRoot, errorMessage, listCampaigns } from './api/client'
+import type { CampaignResponse } from './api/types'
+import { navigationItems, type NavigationKey } from './app/navigation'
 
-const activeView = ref<WorkbenchView>('campaigns')
+const route = useRoute()
 const campaigns = ref<CampaignResponse[]>([])
 const selectedCampaignId = ref<string | null>(null)
-const campaignsLoading = ref(false)
-const campaignsError = ref<string | null>(null)
-const drawerOpen = ref(false)
-const selectedDeal = ref<WorkbenchDeal | null>(null)
+const antTheme = {
+  token: {
+    borderRadius: 8,
+    colorPrimary: '#216b55',
+    colorInfo: '#216b55',
+  },
+}
 
-const selectedCampaign = computed(
-  () => campaigns.value.find((campaign) => campaign.id === selectedCampaignId.value) ?? null,
-)
+const activeNavigationKey = computed<NavigationKey>(() => {
+  const path = route.path
+  if (path.startsWith('/influencers')) return 'influencers'
+  if (path.startsWith('/brands')) return 'brands'
+  if (path.startsWith('/email')) return 'email'
+  if (path.startsWith('/templates')) return 'templates'
+  return 'campaigns'
+})
 
-const loadCampaigns = async () => {
-  campaignsLoading.value = true
-  campaignsError.value = null
-
+const loadCampaignContext = async () => {
   try {
     const response = await listCampaigns()
     campaigns.value = response.campaigns
@@ -38,123 +40,73 @@ const loadCampaigns = async () => {
     ) {
       selectedCampaignId.value = response.campaigns[0]?.id ?? null
     }
-  } catch (error) {
-    campaignsError.value = errorMessage(error)
-  } finally {
-    campaignsLoading.value = false
-  }
-}
-
-const handleCreateCampaign = async (payload: CampaignCreateRequest) => {
-  campaignsError.value = null
-
-  try {
-    const created = await createCampaign(payload)
-    campaigns.value = [created, ...campaigns.value]
-    selectedCampaignId.value = created.id
-  } catch (error) {
-    campaignsError.value = errorMessage(error)
+  } catch (contextError) {
+    console.error(errorMessage(contextError))
   }
 }
 
 const selectCampaign = (campaignId: string) => {
-  selectedCampaignId.value = campaignId
+  selectedCampaignId.value = campaignId || null
 }
 
-const importForCampaign = (campaignId: string) => {
-  selectedCampaignId.value = campaignId
-  activeView.value = 'imports'
-}
-
-const openDealDetail = (deal: WorkbenchDeal | null) => {
-  selectedDeal.value =
-    deal ??
-    ({
-      id: 'pending-api',
-      influencerName: 'Deal detail scaffold',
-      status: 'DRAFT',
-      labels: ['deliverables', 'compensation', 'email'],
-      nextAction: 'Load a campaign deal once the Deal Pipeline API is available.',
-    } satisfies WorkbenchDeal)
-  drawerOpen.value = true
-}
-
-onMounted(loadCampaigns)
+onMounted(loadCampaignContext)
 </script>
 
 <template>
-  <main class="app-shell">
-    <aside class="sidebar" aria-label="Desktop IRM navigation">
-      <div class="brand-block">
-        <span class="brand-mark">IRM</span>
-        <div>
-          <strong>Desktop IRM</strong>
-          <span>Local workbench</span>
+  <a-config-provider :theme="antTheme">
+    <a-layout class="app-shell">
+      <a-layout-sider class="sidebar" width="244">
+        <div class="brand-block">
+          <span class="brand-mark">IRM</span>
+          <div>
+            <strong>Desktop IRM</strong>
+            <span>Local workbench</span>
+          </div>
         </div>
-      </div>
 
-      <nav class="nav-list">
-        <button
-          v-for="item in navigationItems"
-          :key="item.key"
-          class="nav-item"
-          :class="{ active: activeView === item.key }"
-          type="button"
-          @click="activeView = item.key"
-        >
-          <span>{{ item.label }}</span>
-          <small>{{ item.detail }}</small>
-        </button>
-      </nav>
+        <a-menu class="nav-menu" theme="dark" mode="inline" :selected-keys="[activeNavigationKey]">
+          <a-menu-item v-for="item in navigationItems" :key="item.key">
+            <RouterLink :to="item.path" class="nav-link">
+              <span>{{ item.label }}</span>
+              <small>{{ item.detail }}</small>
+            </RouterLink>
+          </a-menu-item>
+        </a-menu>
+      </a-layout-sider>
 
-      <div class="api-box">
-        <span>API base</span>
-        <code>{{ apiRoot }}</code>
-      </div>
-    </aside>
+      <a-layout>
+        <a-layout-header class="top-bar">
+          <div>
+            <strong>Desktop IRM</strong>
+            <span>Campaign-first workspace</span>
+          </div>
+          <div class="api-box">
+            <span>API base</span>
+            <code>{{ apiRoot }}</code>
+          </div>
+        </a-layout-header>
 
-    <section class="content-area">
-      <CampaignWorkspace
-        v-if="activeView === 'campaigns'"
-        :campaigns="campaigns"
-        :selected-campaign-id="selectedCampaignId"
-        :loading="campaignsLoading"
-        :error="campaignsError"
-        @refresh="loadCampaigns"
-        @select-campaign="selectCampaign"
-        @create-campaign="handleCreateCampaign"
-        @import-for-campaign="importForCampaign"
-        @open-deal="openDealDetail"
-      />
-
-      <InfluencerLibrary
-        v-else-if="activeView === 'influencers'"
-        :campaigns="campaigns"
-        :selected-campaign-id="selectedCampaignId"
-        @campaign-changed="selectCampaign"
-      />
-
-      <ImportWizard
-        v-else
-        :campaigns="campaigns"
-        :selected-campaign-id="selectedCampaignId"
-        @campaign-changed="selectCampaign"
-      />
-    </section>
-
-    <DealDetailDrawer
-      :open="drawerOpen"
-      :campaign-name="selectedCampaign?.name"
-      :deal="selectedDeal"
-      @close="drawerOpen = false"
-    />
-  </main>
+        <a-layout-content class="content-area">
+          <RouterView v-slot="{ Component, route: matchedRoute }">
+            <component
+              :is="Component"
+              v-if="matchedRoute.meta.campaignContext"
+              :campaigns="campaigns"
+              :selected-campaign-id="selectedCampaignId"
+              @campaign-changed="selectCampaign"
+            />
+            <component :is="Component" v-else />
+          </RouterView>
+        </a-layout-content>
+      </a-layout>
+    </a-layout>
+  </a-config-provider>
 </template>
 
 <style>
 :root {
-  color: #242826;
-  background: #eef2f6;
+  color: #20262d;
+  background: #f2f5f8;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -177,28 +129,21 @@ textarea {
 
 <style scoped>
 .app-shell {
-  display: grid;
-  grid-template-columns: 244px minmax(0, 1fr);
   min-height: 100vh;
-  background: #eef2f6;
+  background: #f2f5f8;
 }
 
 .sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  min-width: 0;
-  padding: 18px;
-  border-right: 1px solid #d7dee8;
-  background: #242826;
-  color: #ffffff;
+  background: #202624;
 }
 
 .brand-block {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 48px;
+  min-height: 64px;
+  padding: 14px 18px;
+  color: #ffffff;
 }
 
 .brand-mark {
@@ -222,57 +167,65 @@ textarea {
 }
 
 .brand-block span:last-child {
-  color: #bcc7bd;
+  color: #bac8c0;
   font-size: 12px;
 }
 
-.nav-list {
-  display: grid;
-  gap: 8px;
-}
-
-.nav-item {
-  display: grid;
-  gap: 3px;
-  width: 100%;
-  min-height: 54px;
-  padding: 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
+.nav-menu {
+  border-inline-end: 0;
   background: transparent;
-  color: #e1e8e1;
-  text-align: left;
-  cursor: pointer;
 }
 
-.nav-item span {
-  font-weight: 800;
+.nav-link {
+  display: grid;
+  gap: 2px;
+  line-height: 1.2;
 }
 
-.nav-item small {
-  color: #bcc7bd;
+.nav-link small {
+  color: #b8c3be;
+  font-size: 11px;
 }
 
-.nav-item.active {
-  border-color: #8dbfaf;
-  background: #303a33;
-  color: #ffffff;
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 64px;
+  padding: 0 24px;
+  border-bottom: 1px solid #dce2ea;
+  background: #ffffff;
+}
+
+.top-bar div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.top-bar strong {
+  color: #20262d;
+}
+
+.top-bar span {
+  color: #697582;
+  font-size: 12px;
 }
 
 .api-box {
-  display: grid;
-  gap: 6px;
-  margin-top: auto;
-  padding: 10px;
-  border: 1px solid #414941;
-  border-radius: 8px;
-  color: #bcc7bd;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #697582;
   font-size: 12px;
 }
 
 .api-box code {
-  overflow-wrap: anywhere;
-  color: #ffffff;
+  max-width: 420px;
+  overflow: hidden;
+  color: #20262d;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .content-area {
@@ -282,18 +235,19 @@ textarea {
 
 @media (max-width: 760px) {
   .app-shell {
-    grid-template-columns: 1fr;
+    display: block;
   }
 
   .sidebar {
-    position: sticky;
-    top: 0;
-    z-index: 5;
-    gap: 12px;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
   }
 
-  .nav-list {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .top-bar {
+    align-items: flex-start;
+    height: auto;
+    padding: 14px 16px;
   }
 
   .api-box {

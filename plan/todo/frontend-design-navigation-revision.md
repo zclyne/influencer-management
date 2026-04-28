@@ -45,6 +45,12 @@ When this design revision is implemented in Figma and reflected in frontend code
 11. Import Wizard should optimize for preview review after upload.
     The upload control should collapse to a compact file status row after a file is selected. Use the main page area for the preview table, row decisions, filters, row removal, and confirm actions.
 
+12. Campaigns need a list page before the workspace page.
+    `/campaigns` should show a Campaign List page for browsing, creating, deleting, and opening campaigns. The campaign workspace/pipeline belongs to `/campaigns/:campaignId`.
+
+13. Top bar must stay global.
+    The top bar should contain page-independent workspace controls or status only. Page-specific actions such as `New campaign`, `New brand`, `New template`, `Import CSV`, `Add from library`, search inputs, and export actions belong inside the page header or table toolbar.
+
 ## Product Interpretation
 
 The product remains campaign-first:
@@ -98,6 +104,7 @@ Design implications:
 
 - Prefer conventional data-table behavior over custom spreadsheet-like controls unless the workflow truly requires it.
 - Prefer framework-ready layouts: sidebar shell, top toolbar, tabs, drawers, modals, forms, tables, dropdown filters, toasts, and empty states.
+- Keep the top toolbar global; do not place page-specific primary actions in it.
 - Keep interaction states easy to map to Vue components and API state.
 - Avoid designing bespoke controls that would require a custom component system before the product workflow is validated.
 - Keep dense table interactions practical: stable row height, selectable rows, sortable columns, simple filter chips, and a right-side detail drawer.
@@ -144,6 +151,9 @@ Update the existing Figma file:
 - Replace sidebar `Templates / Outreach drafts` subtitle with `Templates / Reusable docs`.
 - Remove `Exports` from primary sidebar.
 - Add `Export view` in Campaign Workspace toolbar and selection actions.
+- Add a Campaign List page before Campaign Workspace.
+- Campaign List should use a framework table with row selection, row delete, bulk delete, and campaign-name navigation into Campaign Workspace.
+- Page-specific actions must live inside the content area or table toolbar, not the global top bar.
 - Add an Influencer Library screen state with:
   - `Library`
   - `Import CSV`
@@ -184,6 +194,8 @@ Expected code behavior:
 - Rename Templates subtitle to avoid outreach-only wording.
 - Keep campaign export as an action, not a route.
 - Treat export API integration as Campaign Workspace behavior.
+- Keep Campaign List focused on campaign selection and management; do not put campaign-specific export there.
+- Keep page-specific create/search/import/export actions out of the global top bar.
 - In Campaign Workspace, add creators by selecting from the existing Influencer Library; adding an influencer to a campaign creates a Deal.
 - Do not add a Campaign-level import action.
 - In data tables, include row selection and a rightmost delete action column.
@@ -208,6 +220,8 @@ Expected code behavior:
 - Templates subtitle is broader than outreach.
 - Import Wizard is visually nested under Influencers.
 - Campaign export is shown as a contextual action.
+- Campaign List exists separately from Campaign Workspace.
+- Top bar contains only global workspace/status controls; page actions are inside page content.
 - Export is treated as a Campaign sub-feature in both design and code.
 - Email page remains a placeholder, not a full workflow screen.
 - Influencer and Deal screens show creators with multiple platforms.

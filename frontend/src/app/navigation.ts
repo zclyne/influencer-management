@@ -1,25 +1,41 @@
-export type WorkbenchView = 'campaigns' | 'influencers' | 'imports'
+export type NavigationKey = 'campaigns' | 'influencers' | 'brands' | 'email' | 'templates'
 
 export interface NavigationItem {
-  key: WorkbenchView
+  key: NavigationKey
   label: string
   detail: string
+  path: string
 }
 
 export const navigationItems: NavigationItem[] = [
   {
     key: 'campaigns',
     label: 'Campaigns',
-    detail: 'Workspace',
+    detail: 'List',
+    path: '/campaigns',
   },
   {
     key: 'influencers',
     label: 'Influencers',
     detail: 'Library',
+    path: '/influencers',
   },
   {
-    key: 'imports',
-    label: 'Imports',
-    detail: 'Modash CSV',
+    key: 'brands',
+    label: 'Brands',
+    detail: 'Accounts',
+    path: '/brands',
+  },
+  {
+    key: 'email',
+    label: 'Email',
+    detail: 'Placeholder',
+    path: '/email',
+  },
+  {
+    key: 'templates',
+    label: 'Templates',
+    detail: 'Docs',
+    path: '/templates',
   },
 ]

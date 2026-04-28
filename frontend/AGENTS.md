@@ -22,6 +22,12 @@ Use this stack for frontend implementation:
 Do not build a custom UI component system for common controls that Ant Design Vue already
 covers.
 
+Ant Design Vue is the default UI implementation layer for the entire frontend. Prefer its
+components before writing custom UI. Custom components should compose Ant Design Vue
+primitives for product-specific behavior; they should not replace Ant Design Vue tables,
+forms, modals, drawers, upload controls, selects, buttons, tabs, tags, pagination,
+notifications, or layout primitives.
+
 ## Product Navigation
 
 Primary navigation should contain:
@@ -101,6 +107,10 @@ Use Ant Design Vue primitives for:
 - tags.
 - notifications.
 
+Default to Ant Design Vue for any other common workbench UI primitive as well. Only write
+custom UI when Ant Design Vue cannot reasonably express the behavior, and keep that custom
+code narrowly scoped to the product-specific interaction.
+
 Tables:
 
 - Use framework table behavior for sorting, filtering, pagination, and selection.
@@ -115,6 +125,9 @@ Tables:
 Layouts:
 
 - Use a route-driven app shell with sidebar, top toolbar, and content outlet.
+- Keep the top toolbar global. Do not put page-specific create, import, export, search, or
+  delete actions in the top toolbar.
+- Put page-specific actions in the page header or table toolbar.
 - Use drawer only for side context such as quick deal review.
 - Use full pages for standalone detail workflows such as Influencer Detail and Deal Detail.
 
@@ -184,4 +197,3 @@ bun run build
 ```
 
 Docs-only changes do not require tests.
-

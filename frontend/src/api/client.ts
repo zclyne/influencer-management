@@ -102,6 +102,11 @@ export const createCampaign = (payload: CampaignCreateRequest) =>
     body: JSON.stringify(payload),
   })
 
+export const archiveCampaign = (campaignId: string) =>
+  apiRequest<void>(`/campaigns/${campaignId}`, {
+    method: 'DELETE',
+  })
+
 export const createManualInfluencer = (payload: ManualInfluencerInput, mergeIfMatched = false) =>
   apiRequest<ManualInfluencerResponse>(
     `/influencers/manual${toQueryString({ merge_if_matched: mergeIfMatched })}`,

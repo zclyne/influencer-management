@@ -1,0 +1,537 @@
+<script setup lang="ts">
+import { computed, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
+import type { CampaignCreateRequest, CampaignResponse, CampaignStatus } from '../api/types'
+import { campaignStatusLabels, campaignStatuses, useCampaigns } from './useCampaigns'
+
+interface CampaignCreateForm {
+  name: string
+  status: CampaignStatus
+  budget: number | null
+  startDate: string | null
+  endDate: string | null
+  brief: string
+  notes: string
+}
+
+const router = useRouter()
+const formRef = ref<FormInstance>()
+const createModalOpen = ref(false)
+const createForm = reactive<CampaignCreateForm>({
+  name: '',
+  status: 'PLANNING',
+  budget: null,
+  startDate: null,
+  endDate: null,
+  brief: '',
+  notes: '',
+})
+
+const {
+  visibleCampaigns,
+  loading,
+  creating,
+  archiving,
+  error,
+  searchText,
+  statusFilter,
+  includeArchived,
+  selectedRowKeys,
+  activeCampaignCount,
+  planningCampaignCount,
+  liveCampaignCount,
+  archivedCampaignCount,
+  loadCampaigns,
+  createNewCampaign,
+  archiveCampaign,
+  archiveSelectedCampaigns,
+} = useCampaigns()
+
+const columns: TableColumnsType<CampaignResponse> = [
+  {
+    title: 'Campaign',
+    key: 'campaign',
+    dataIndex: 'name',
+  },
+  {
+    title: 'Brands',
+    key: 'brands',
+  },
+  {
+    title: 'Status',
+    key: 'status',
+    dataIndex: 'status',
+    filters: campaignStatuses.map((status) => ({
+      text: campaignStatusLabels[status],
+      value: status,
+    })),
+    onFilter: (value, record) => record.status === value,
+  },
+  {
+    title: 'Budget',
+    key: 'budget',
+    dataIndex: 'budget',
+    align: 'right',
+  },
+  {
+    title: 'Updated',
+    key: 'updated',
+    dataIndex: 'updated_at',
+    sorter: (left, right) =>
+      new Date(left.updated_at).getTime() - new Date(right.updated_at).getTime(),
+  },
+  {
+    title: 'Actions',
+    key: 'actions',
+    align: 'right',
+  },
+]
+
+const statusOptions = computed(() =>
+  campaignStatuses.map((status) => ({
+    label: campaignStatusLabels[status],
+    value: status,
+  })),
+)
+
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedRowKeys.value,
+  onChange: (keys: (string | number)[]) => {
+    selectedRowKeys.value = keys.map(String)
+  },
+  getCheckboxProps: (record: CampaignResponse) => ({
+    disabled: Boolean(record.archived_at),
+  }),
+}))
+
+const formatCurrency = (value: CampaignResponse['budget']) => {
+  if (value === null || value === undefined || value === '') return 'Not set'
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return String(value)
+
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
+
+const formatDate = (value: string) =>
+  new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(value))
+
+const statusColor = (status: CampaignStatus) => {
+  if (status === 'ACTIVE') return 'green'
+  if (status === 'EVALUATING') return 'gold'
+  if (status === 'CLOSED') return 'default'
+  return 'blue'
+}
+
+const statusLabel = (status: CampaignStatus) => campaignStatusLabels[status]
+
+const resetCreateForm = () => {
+  createForm.name = ''
+  createForm.status = 'PLANNING'
+  createForm.budget = null
+  createForm.startDate = null
+  createForm.endDate = null
+  createForm.brief = ''
+  createForm.notes = ''
+  formRef.value?.clearValidate()
+}
+
+const buildCreatePayload = (): CampaignCreateRequest => ({
+  name: createForm.name.trim(),
+  status: createForm.status,
+  budget: createForm.budget,
+  start_date: createForm.startDate,
+  end_date: createForm.endDate,
+  brief: createForm.brief.trim() || null,
+  notes: createForm.notes.trim() || null,
+})
+
+const openCreateModal = () => {
+  createModalOpen.value = true
+}
+
+const submitCreate = async () => {
+  await formRef.value?.validate()
+
+  try {
+    const created = await createNewCampaign(buildCreatePayload())
+    message.success('Campaign created.')
+    createModalOpen.value = false
+    resetCreateForm()
+    await router.push({ name: 'campaignWorkspace', params: { campaignId: created.id } })
+  } catch {
+    message.error('Campaign could not be created.')
+  }
+}
+
+const archiveOne = async (campaign: CampaignResponse) => {
+  try {
+    await archiveCampaign(campaign.id)
+    message.success(`${campaign.name} archived.`)
+  } catch {
+    message.error(`${campaign.name} could not be archived.`)
+  }
+}
+
+const confirmBulkArchive = () => {
+  if (!selectedRowKeys.value.length) return
+
+  Modal.confirm({
+    title: 'Archive selected campaigns?',
+    content: 'Archived campaigns are hidden unless Include archived is turned on.',
+    okText: 'Archive selected',
+    okType: 'danger',
+    cancelText: 'Cancel',
+    onOk: async () => {
+      const result = await archiveSelectedCampaigns()
+      if (result.failed) {
+        message.error(`${result.failed} campaign(s) could not be archived.`)
+      }
+      if (result.archived) {
+        message.success(`${result.archived} campaign(s) archived.`)
+      }
+    },
+  })
+}
+
+watch(createModalOpen, (open) => {
+  if (!open) resetCreateForm()
+})
+
+void loadCampaigns()
+</script>
+
+<template>
+  <section class="campaign-list-page">
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">Campaigns</p>
+        <h1>Campaign list</h1>
+        <p class="page-description">
+          Open campaigns to manage deals, add influencers from the library, and use campaign-scoped export.
+        </p>
+      </div>
+    </div>
+
+    <a-alert v-if="error" class="page-alert" type="error" :message="error" show-icon />
+
+    <div class="summary-grid">
+      <a-card size="small">
+        <span>Current campaigns</span>
+        <strong>{{ activeCampaignCount }}</strong>
+      </a-card>
+      <a-card size="small">
+        <span>Planning</span>
+        <strong>{{ planningCampaignCount }}</strong>
+      </a-card>
+      <a-card size="small">
+        <span>Active</span>
+        <strong>{{ liveCampaignCount }}</strong>
+      </a-card>
+      <a-card v-if="includeArchived" size="small">
+        <span>Archived</span>
+        <strong>{{ archivedCampaignCount }}</strong>
+      </a-card>
+    </div>
+
+    <a-card class="table-card" :body-style="{ padding: '0' }">
+      <div class="table-toolbar">
+        <a-input-search
+          v-model:value="searchText"
+          class="search-input"
+          allow-clear
+          placeholder="Search campaigns or brands"
+        />
+        <a-select
+          v-model:value="statusFilter"
+          class="status-filter"
+          allow-clear
+          placeholder="All statuses"
+          :options="statusOptions"
+        />
+        <label class="archive-toggle">
+          <span>Include archived</span>
+          <a-switch v-model:checked="includeArchived" />
+        </label>
+        <a-button
+          danger
+          :disabled="!selectedRowKeys.length || archiving"
+          :loading="archiving"
+          @click="confirmBulkArchive"
+        >
+          Delete selected
+        </a-button>
+        <a-button type="primary" @click="openCreateModal">New campaign</a-button>
+      </div>
+
+      <a-table
+        :columns="columns"
+        :data-source="visibleCampaigns"
+        :loading="loading"
+        :pagination="{ pageSize: 10, showSizeChanger: true }"
+        :row-key="(record: CampaignResponse) => record.id"
+        :row-selection="rowSelection"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'campaign'">
+            <div class="campaign-cell">
+              <RouterLink :to="{ name: 'campaignWorkspace', params: { campaignId: record.id } }">
+                {{ record.name }}
+              </RouterLink>
+              <span v-if="record.brief">{{ record.brief }}</span>
+            </div>
+          </template>
+
+          <template v-else-if="column.key === 'brands'">
+            <div v-if="record.brands.length" class="tag-row">
+              <a-tag v-for="link in record.brands" :key="link.id">{{ link.brand.name }}</a-tag>
+            </div>
+            <span v-else class="muted">No brands</span>
+          </template>
+
+          <template v-else-if="column.key === 'status'">
+            <div class="tag-row">
+              <a-tag :color="statusColor(record.status)">
+                {{ statusLabel(record.status) }}
+              </a-tag>
+              <a-tag v-if="record.archived_at" color="red">Archived</a-tag>
+            </div>
+          </template>
+
+          <template v-else-if="column.key === 'budget'">
+            <span>{{ formatCurrency(record.budget) }}</span>
+          </template>
+
+          <template v-else-if="column.key === 'updated'">
+            <span>{{ formatDate(record.updated_at) }}</span>
+          </template>
+
+          <template v-else-if="column.key === 'actions'">
+            <a-popconfirm
+              v-if="!record.archived_at"
+              title="Archive this campaign?"
+              ok-text="Archive"
+              cancel-text="Cancel"
+              @confirm="archiveOne(record)"
+            >
+              <a-button danger type="link">Delete</a-button>
+            </a-popconfirm>
+            <span v-else class="muted">Archived</span>
+          </template>
+        </template>
+      </a-table>
+    </a-card>
+
+    <a-modal
+      v-model:open="createModalOpen"
+      title="New campaign"
+      ok-text="Create campaign"
+      cancel-text="Cancel"
+      :confirm-loading="creating"
+      destroy-on-close
+      @ok="submitCreate"
+    >
+      <a-form ref="formRef" :model="createForm" layout="vertical">
+        <a-form-item
+          label="Name"
+          name="name"
+          :rules="[{ required: true, message: 'Campaign name is required.' }]"
+        >
+          <a-input v-model:value="createForm.name" placeholder="Spring launch" />
+        </a-form-item>
+
+        <a-form-item label="Status" name="status">
+          <a-select v-model:value="createForm.status" :options="statusOptions" />
+        </a-form-item>
+
+        <a-form-item label="Budget" name="budget">
+          <a-input-number
+            v-model:value="createForm.budget"
+            :min="0"
+            :precision="2"
+            placeholder="0"
+            class="full-width"
+          />
+        </a-form-item>
+
+        <div class="form-grid">
+          <a-form-item label="Start date" name="startDate">
+            <a-date-picker
+              v-model:value="createForm.startDate"
+              value-format="YYYY-MM-DD"
+              class="full-width"
+            />
+          </a-form-item>
+          <a-form-item label="End date" name="endDate">
+            <a-date-picker
+              v-model:value="createForm.endDate"
+              value-format="YYYY-MM-DD"
+              class="full-width"
+            />
+          </a-form-item>
+        </div>
+
+        <a-form-item label="Brief" name="brief">
+          <a-textarea v-model:value="createForm.brief" :rows="3" />
+        </a-form-item>
+
+        <a-form-item label="Notes" name="notes">
+          <a-textarea v-model:value="createForm.notes" :rows="3" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+  </section>
+</template>
+
+<style scoped>
+.campaign-list-page {
+  display: grid;
+  gap: 18px;
+}
+
+.page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #5e6974;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  color: #20262d;
+  font-size: 30px;
+}
+
+.page-description {
+  max-width: 720px;
+  margin: 8px 0 0;
+  color: #58636f;
+  line-height: 1.5;
+}
+
+.page-alert {
+  border-radius: 8px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.summary-grid :deep(.ant-card-body) {
+  display: grid;
+  gap: 6px;
+}
+
+.summary-grid span,
+.muted {
+  color: #697582;
+}
+
+.summary-grid strong {
+  color: #20262d;
+  font-size: 26px;
+}
+
+.table-card {
+  overflow: hidden;
+}
+
+.table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.search-input {
+  width: min(360px, 100%);
+}
+
+.status-filter {
+  width: 180px;
+}
+
+.archive-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #4e5965;
+}
+
+.campaign-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.campaign-cell a {
+  color: #175fcb;
+  font-weight: 700;
+}
+
+.campaign-cell span {
+  max-width: 420px;
+  overflow: hidden;
+  color: #697582;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .table-toolbar {
+    align-items: stretch;
+  }
+
+  .search-input,
+  .status-filter,
+  .table-toolbar button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .summary-grid,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
