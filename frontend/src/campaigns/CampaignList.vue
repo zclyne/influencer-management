@@ -458,6 +458,10 @@ h1 {
   overflow: hidden;
 }
 
+.table-card :deep(.ant-table-pagination) {
+  padding-inline: 14px;
+}
+
 .table-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
