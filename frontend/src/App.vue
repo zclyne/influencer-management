@@ -193,6 +193,7 @@ textarea {
   justify-content: space-between;
   gap: 16px;
   height: 64px;
+  line-height: 1.2;
   padding: 0 24px;
   border-bottom: 1px solid #dce2ea;
   background: #ffffff;
@@ -210,6 +211,7 @@ textarea {
 .top-bar span {
   color: #697582;
   font-size: 12px;
+  line-height: 1.2;
 }
 
 .api-box {
@@ -218,6 +220,7 @@ textarea {
   gap: 8px;
   color: #697582;
   font-size: 12px;
+  line-height: 1.2;
 }
 
 .api-box code {

@@ -262,6 +262,7 @@ uv run ruff check .
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 uv run alembic upgrade head
 uv run python -m app.tasks.worker
+uv run python -m app.dev.seed_mock_data
 ```
 
 Docker Compose from repo root:

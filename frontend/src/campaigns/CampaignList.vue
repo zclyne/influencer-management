@@ -244,32 +244,36 @@ void loadCampaigns()
 
     <a-card class="table-card" :body-style="{ padding: '0' }">
       <div class="table-toolbar">
-        <a-input-search
-          v-model:value="searchText"
-          class="search-input"
-          allow-clear
-          placeholder="Search campaigns or brands"
-        />
-        <a-select
-          v-model:value="statusFilter"
-          class="status-filter"
-          allow-clear
-          placeholder="All statuses"
-          :options="statusOptions"
-        />
-        <label class="archive-toggle">
-          <span>Include archived</span>
-          <a-switch v-model:checked="includeArchived" />
-        </label>
-        <a-button
-          danger
-          :disabled="!selectedRowKeys.length || archiving"
-          :loading="archiving"
-          @click="confirmBulkArchive"
-        >
-          Delete selected
-        </a-button>
-        <a-button type="primary" @click="openCreateModal">New campaign</a-button>
+        <div class="table-toolbar-controls">
+          <a-input-search
+            v-model:value="searchText"
+            class="search-input"
+            allow-clear
+            placeholder="Search campaigns or brands"
+          />
+          <a-select
+            v-model:value="statusFilter"
+            class="status-filter"
+            allow-clear
+            placeholder="All statuses"
+            :options="statusOptions"
+          />
+          <label class="archive-toggle">
+            <span>Include archived</span>
+            <a-switch v-model:checked="includeArchived" />
+          </label>
+        </div>
+        <div class="table-toolbar-actions">
+          <a-button
+            danger
+            :disabled="!selectedRowKeys.length || archiving"
+            :loading="archiving"
+            @click="confirmBulkArchive"
+          >
+            Delete selected
+          </a-button>
+          <a-button type="primary" @click="openCreateModal">New campaign</a-button>
+        </div>
       </div>
 
       <a-table
@@ -455,20 +459,37 @@ h1 {
 }
 
 .table-toolbar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 14px;
   border-bottom: 1px solid #edf0f5;
 }
 
+.table-toolbar-controls,
+.table-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.table-toolbar-controls {
+  flex-wrap: nowrap;
+}
+
+.table-toolbar-actions {
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+
 .search-input {
-  width: min(360px, 100%);
+  width: min(300px, 100%);
 }
 
 .status-filter {
-  width: 180px;
+  width: 160px;
 }
 
 .archive-toggle {
@@ -476,6 +497,7 @@ h1 {
   align-items: center;
   gap: 8px;
   color: #4e5965;
+  white-space: nowrap;
 }
 
 .campaign-cell {
@@ -518,12 +540,20 @@ h1 {
   }
 
   .table-toolbar {
+    grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .table-toolbar-controls,
+  .table-toolbar-actions {
+    flex-wrap: wrap;
   }
 
   .search-input,
   .status-filter,
-  .table-toolbar button {
+  .archive-toggle,
+  .table-toolbar-actions,
+  .table-toolbar-actions button {
     width: 100%;
   }
 }
