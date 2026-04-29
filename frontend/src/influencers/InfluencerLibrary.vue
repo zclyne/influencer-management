@@ -1,8 +1,27 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { createManualInfluencer, errorMessage } from '../api/client'
-import type { CampaignResponse, ManualInfluencerResponse } from '../api/types'
-import StatusBadge from '../shared/StatusBadge.vue'
+import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
+import type {
+  CampaignResponse,
+  InfluencerListItem,
+  InfluencerPlatformSummary,
+  ManualInfluencerInput,
+} from '../api/types'
+import { platformOptions, useInfluencers } from './useInfluencers'
+
+interface ManualInfluencerForm {
+  displayName: string
+  fullName: string
+  platform: string
+  username: string
+  profileUrl: string
+  followerCount: number | null
+  email: string
+  country: string
+  city: string
+  notes: string
+  targetCampaignId: string
+}
 
 const props = defineProps<{
   campaigns: CampaignResponse[]
@@ -13,13 +32,15 @@ const emit = defineEmits<{
   campaignChanged: [campaignId: string]
 }>()
 
-const form = reactive({
+const formRef = ref<FormInstance>()
+const createModalOpen = ref(false)
+const createForm = reactive<ManualInfluencerForm>({
   displayName: '',
   fullName: '',
   platform: 'instagram',
   username: '',
   profileUrl: '',
-  followerCount: '',
+  followerCount: null,
   email: '',
   country: '',
   city: '',
@@ -27,377 +48,631 @@ const form = reactive({
   targetCampaignId: props.selectedCampaignId ?? '',
 })
 
-const search = ref('')
-const saving = ref(false)
-const saveError = ref<string | null>(null)
-const lastCreated = ref<ManualInfluencerResponse | null>(null)
+const {
+  influencers,
+  loading,
+  creating,
+  archiving,
+  error,
+  searchText,
+  platformFilter,
+  countryFilter,
+  cityFilter,
+  includeArchived,
+  selectedRowKeys,
+  activeInfluencerCount,
+  platformCount,
+  withContactCount,
+  archivedInfluencerCount,
+  loadInfluencers,
+  createInfluencer,
+  archiveInfluencer,
+  archiveSelectedInfluencers,
+} = useInfluencers()
 
-const campaignOptions = computed(() => props.campaigns)
+const columns: TableColumnsType<InfluencerListItem> = [
+  {
+    title: 'Influencer',
+    key: 'influencer',
+    dataIndex: 'display_name',
+    width: 260,
+  },
+  {
+    title: 'Platforms',
+    key: 'platforms',
+    width: 280,
+  },
+  {
+    title: 'Contact',
+    key: 'contact',
+    width: 220,
+  },
+  {
+    title: 'Location',
+    key: 'location',
+    width: 180,
+  },
+  {
+    title: 'Deals',
+    key: 'deals',
+    dataIndex: 'recent_deal_count',
+    align: 'right',
+    width: 100,
+  },
+  {
+    title: 'Updated',
+    key: 'updated',
+    dataIndex: 'updated_at',
+    sorter: (left, right) =>
+      new Date(left.updated_at).getTime() - new Date(right.updated_at).getTime(),
+    width: 140,
+  },
+  {
+    title: 'Actions',
+    key: 'actions',
+    align: 'right',
+    width: 110,
+  },
+]
+
+const campaignSelectOptions = computed(() => [
+  { label: 'Library only', value: '' },
+  ...props.campaigns.map((campaign) => ({
+    label: campaign.name,
+    value: campaign.id,
+  })),
+])
+
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedRowKeys.value,
+  onChange: (keys: (string | number)[]) => {
+    selectedRowKeys.value = keys.map(String)
+  },
+  getCheckboxProps: (record: InfluencerListItem) => ({
+    disabled: Boolean(record.archived_at),
+  }),
+}))
+
+const formatNumber = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return 'Not set'
+  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(
+    value,
+  )
+}
+
+const formatDate = (value: string) =>
+  new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(value))
+
+const formatLocation = (record: InfluencerListItem) =>
+  [record.city, record.country].filter(Boolean).join(', ') || 'Not set'
+
+const platformLabel = (value: string) => {
+  const option = platformOptions.find((item) => item.value === value)
+  return option?.label ?? value
+}
+
+const platformColor = (platform: string) => {
+  if (platform === 'instagram') return 'magenta'
+  if (platform === 'tiktok') return 'cyan'
+  if (platform === 'youtube') return 'red'
+  if (platform === 'twitter') return 'blue'
+  return 'default'
+}
+
+const platformDisplayName = (platform: InfluencerPlatformSummary) =>
+  platform.username ? `${platformLabel(platform.platform)} @${platform.username}` : platformLabel(platform.platform)
+
+const resetCreateForm = () => {
+  createForm.displayName = ''
+  createForm.fullName = ''
+  createForm.platform = 'instagram'
+  createForm.username = ''
+  createForm.profileUrl = ''
+  createForm.followerCount = null
+  createForm.email = ''
+  createForm.country = ''
+  createForm.city = ''
+  createForm.notes = ''
+  createForm.targetCampaignId = props.selectedCampaignId ?? ''
+  formRef.value?.clearValidate()
+}
+
+const buildCreatePayload = (): ManualInfluencerInput => ({
+  display_name: createForm.displayName.trim(),
+  full_name: createForm.fullName.trim() || null,
+  platform:
+    createForm.username.trim() || createForm.profileUrl.trim() || createForm.followerCount !== null
+      ? createForm.platform
+      : null,
+  username: createForm.username.trim() || null,
+  profile_url: createForm.profileUrl.trim() || null,
+  follower_count: createForm.followerCount,
+  emails: createForm.email.trim() ? [createForm.email.trim()] : [],
+  country: createForm.country.trim() || null,
+  city: createForm.city.trim() || null,
+  notes: createForm.notes.trim() || null,
+  target_campaign_id: createForm.targetCampaignId || null,
+})
+
+const openCreateModal = () => {
+  createForm.targetCampaignId = props.selectedCampaignId ?? ''
+  createModalOpen.value = true
+}
+
+const submitCreate = async () => {
+  await formRef.value?.validate()
+
+  try {
+    const created = await createInfluencer(buildCreatePayload())
+    if (createForm.targetCampaignId) {
+      emit('campaignChanged', createForm.targetCampaignId)
+    }
+    message.success(`${created.display_name} created.`)
+    createModalOpen.value = false
+    resetCreateForm()
+  } catch {
+    message.error('Influencer could not be created.')
+  }
+}
+
+const archiveOne = async (influencer: InfluencerListItem) => {
+  try {
+    await archiveInfluencer(influencer.id)
+    message.success(`${influencer.display_name} archived.`)
+  } catch {
+    message.error(`${influencer.display_name} could not be archived.`)
+  }
+}
+
+const confirmBulkArchive = () => {
+  if (!selectedRowKeys.value.length) return
+
+  Modal.confirm({
+    title: 'Archive selected influencers?',
+    content: 'Archived influencers are hidden unless Include archived is turned on.',
+    okText: 'Archive selected',
+    okType: 'danger',
+    cancelText: 'Cancel',
+    onOk: async () => {
+      const result = await archiveSelectedInfluencers()
+      if (result.failed) {
+        message.error(`${result.failed} influencer(s) could not be archived.`)
+      }
+      if (result.archived) {
+        message.success(`${result.archived} influencer(s) archived.`)
+      }
+    },
+  })
+}
 
 watch(
   () => props.selectedCampaignId,
   (campaignId) => {
-    form.targetCampaignId = campaignId ?? ''
+    if (!createModalOpen.value) {
+      createForm.targetCampaignId = campaignId ?? ''
+    }
   },
 )
 
-const submitManualInfluencer = async () => {
-  if (!form.displayName.trim()) return
+watch(createModalOpen, (open) => {
+  if (!open) resetCreateForm()
+})
 
-  saving.value = true
-  saveError.value = null
-  lastCreated.value = null
-
-  try {
-    lastCreated.value = await createManualInfluencer({
-      display_name: form.displayName.trim(),
-      full_name: form.fullName.trim() || null,
-      platform: form.platform.trim() || null,
-      username: form.username.trim() || null,
-      profile_url: form.profileUrl.trim() || null,
-      follower_count: form.followerCount ? Number(form.followerCount) : null,
-      emails: form.email.trim() ? [form.email.trim()] : [],
-      country: form.country.trim() || null,
-      city: form.city.trim() || null,
-      notes: form.notes.trim() || null,
-      target_campaign_id: form.targetCampaignId || null,
-    })
-
-    form.displayName = ''
-    form.fullName = ''
-    form.username = ''
-    form.profileUrl = ''
-    form.followerCount = ''
-    form.email = ''
-    form.country = ''
-    form.city = ''
-    form.notes = ''
-  } catch (error) {
-    saveError.value = errorMessage(error)
-  } finally {
-    saving.value = false
-  }
-}
-
-const selectTargetCampaign = (campaignId: string) => {
-  form.targetCampaignId = campaignId
-  if (campaignId) emit('campaignChanged', campaignId)
-}
+void loadInfluencers()
 </script>
 
 <template>
-  <section class="library-grid">
-    <section class="library-main">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">Influencer Library</p>
-          <h1>Global profiles</h1>
-        </div>
+  <section class="influencer-library-page">
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">Influencers</p>
+        <h1>Influencer library</h1>
+        <p class="page-description">
+          Reuse global creator profiles across campaigns, review platforms, and add new profiles only
+          when needed.
+        </p>
       </div>
-
-      <div class="search-row">
-        <input v-model="search" type="search" placeholder="Search by name, handle, email, or country" />
-        <button type="button" class="secondary-button" disabled>Search</button>
+      <div class="page-actions">
+        <RouterLink :to="{ name: 'influencerImport' }">
+          <a-button>Import CSV</a-button>
+        </RouterLink>
+        <a-button type="primary" @click="openCreateModal">New influencer</a-button>
       </div>
+    </div>
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Primary platform</th>
-              <th>Contacts</th>
-              <th>Location</th>
-              <th>Library status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td colspan="5">
-                <div class="empty-state">
-                  <strong>Library list endpoint pending</strong>
-                  <span>
-                    Manual creation is wired to the backend now. Search, platform management, contacts, and
-                    audience snapshots will load here when the Influencer Library CRUD APIs land.
-                  </span>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <a-alert v-if="error" class="page-alert" type="error" :message="error" show-icon />
 
-    <aside class="manual-panel">
-      <div class="section-heading compact">
-        <div>
-          <p class="eyebrow">Manual entry</p>
-          <h2>Add influencer</h2>
-        </div>
-        <StatusBadge label="Real API" tone="active" />
-      </div>
+    <div class="summary-grid">
+      <a-card size="small">
+        <span>Library profiles</span>
+        <strong>{{ activeInfluencerCount }}</strong>
+      </a-card>
+      <a-card size="small">
+        <span>Platforms</span>
+        <strong>{{ platformCount }}</strong>
+      </a-card>
+      <a-card size="small">
+        <span>With contact</span>
+        <strong>{{ withContactCount }}</strong>
+      </a-card>
+      <a-card v-if="includeArchived" size="small">
+        <span>Archived</span>
+        <strong>{{ archivedInfluencerCount }}</strong>
+      </a-card>
+    </div>
 
-      <form class="manual-form" @submit.prevent="submitManualInfluencer">
-        <label>
-          Display name
-          <input v-model="form.displayName" type="text" placeholder="Creator name" />
-        </label>
-        <label>
-          Full name
-          <input v-model="form.fullName" type="text" placeholder="Optional legal or full name" />
-        </label>
-        <div class="form-row">
-          <label>
-            Platform
-            <input v-model="form.platform" type="text" placeholder="instagram" />
-          </label>
-          <label>
-            Username
-            <input v-model="form.username" type="text" placeholder="handle" />
-          </label>
-        </div>
-        <label>
-          Profile URL
-          <input v-model="form.profileUrl" type="url" placeholder="https://..." />
-        </label>
-        <div class="form-row">
-          <label>
-            Followers
-            <input v-model="form.followerCount" type="number" min="0" step="1" placeholder="0" />
-          </label>
-          <label>
-            Email
-            <input v-model="form.email" type="email" placeholder="name@example.com" />
+    <a-card class="table-card" :body-style="{ padding: '0' }">
+      <div class="table-toolbar">
+        <div class="table-toolbar-controls">
+          <a-input-search
+            v-model:value="searchText"
+            class="search-input"
+            allow-clear
+            placeholder="Search names"
+          />
+          <a-select
+            v-model:value="platformFilter"
+            class="platform-filter"
+            allow-clear
+            placeholder="All platforms"
+            :options="platformOptions"
+          />
+          <a-input v-model:value="countryFilter" class="location-filter" allow-clear placeholder="Country" />
+          <a-input v-model:value="cityFilter" class="location-filter" allow-clear placeholder="City" />
+          <label class="archive-toggle">
+            <span>Include archived</span>
+            <a-switch v-model:checked="includeArchived" />
           </label>
         </div>
-        <div class="form-row">
-          <label>
-            Country
-            <input v-model="form.country" type="text" placeholder="US" />
-          </label>
-          <label>
-            City
-            <input v-model="form.city" type="text" placeholder="New York" />
-          </label>
-        </div>
-        <label>
-          Add to campaign
-          <select
-            :value="form.targetCampaignId"
-            @change="selectTargetCampaign(($event.target as HTMLSelectElement).value)"
+        <div class="table-toolbar-actions">
+          <a-button
+            danger
+            :disabled="!selectedRowKeys.length || archiving"
+            :loading="archiving"
+            @click="confirmBulkArchive"
           >
-            <option value="">Library only</option>
-            <option v-for="campaign in campaignOptions" :key="campaign.id" :value="campaign.id">
-              {{ campaign.name }}
-            </option>
-          </select>
-        </label>
-        <label>
-          Notes
-          <textarea v-model="form.notes" rows="4" placeholder="Global library notes"></textarea>
-        </label>
-
-        <button type="submit" class="primary-button" :disabled="saving">
-          {{ saving ? 'Saving...' : 'Create influencer' }}
-        </button>
-      </form>
-
-      <div v-if="saveError" class="error-box">{{ saveError }}</div>
-      <div v-if="lastCreated" class="success-box">
-        Created {{ lastCreated.display_name }} with {{ lastCreated.platform_count }} platform row(s) and
-        {{ lastCreated.contact_count }} contact row(s).
+            Delete selected
+          </a-button>
+        </div>
       </div>
-    </aside>
+
+      <a-table
+        :columns="columns"
+        :data-source="influencers"
+        :loading="loading"
+        :pagination="{ pageSize: 10, showSizeChanger: true }"
+        :row-key="(record: InfluencerListItem) => record.id"
+        :row-selection="rowSelection"
+        :scroll="{ x: 1160 }"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'influencer'">
+            <div class="influencer-cell">
+              <RouterLink :to="{ name: 'influencerDetail', params: { influencerId: record.id } }">
+                {{ record.display_name }}
+              </RouterLink>
+              <span v-if="record.full_name">{{ record.full_name }}</span>
+              <a-tag v-if="record.archived_at" color="red">Archived</a-tag>
+            </div>
+          </template>
+
+          <template v-else-if="column.key === 'platforms'">
+            <div v-if="record.platforms.length" class="platform-stack">
+              <a-tag
+                v-for="platform in record.platforms"
+                :key="platform.id"
+                :color="platformColor(platform.platform)"
+              >
+                {{ platformDisplayName(platform) }}
+                <span v-if="platform.follower_count"> · {{ formatNumber(platform.follower_count) }}</span>
+              </a-tag>
+            </div>
+            <span v-else class="muted">No platforms</span>
+          </template>
+
+          <template v-else-if="column.key === 'contact'">
+            <div v-if="record.primary_contact" class="contact-cell">
+              <span>{{ record.primary_contact.email }}</span>
+              <small v-if="record.primary_contact.name">{{ record.primary_contact.name }}</small>
+            </div>
+            <span v-else class="muted">No contact</span>
+          </template>
+
+          <template v-else-if="column.key === 'location'">
+            <span>{{ formatLocation(record) }}</span>
+          </template>
+
+          <template v-else-if="column.key === 'deals'">
+            <span>{{ record.recent_deal_count }}</span>
+          </template>
+
+          <template v-else-if="column.key === 'updated'">
+            <span>{{ formatDate(record.updated_at) }}</span>
+          </template>
+
+          <template v-else-if="column.key === 'actions'">
+            <a-popconfirm
+              v-if="!record.archived_at"
+              title="Archive this influencer?"
+              ok-text="Archive"
+              cancel-text="Cancel"
+              @confirm="archiveOne(record)"
+            >
+              <a-button danger type="link">Delete</a-button>
+            </a-popconfirm>
+            <span v-else class="muted">Archived</span>
+          </template>
+        </template>
+      </a-table>
+    </a-card>
+
+    <a-modal
+      v-model:open="createModalOpen"
+      title="New influencer"
+      ok-text="Create influencer"
+      cancel-text="Cancel"
+      :confirm-loading="creating"
+      destroy-on-close
+      @ok="submitCreate"
+    >
+      <a-form ref="formRef" :model="createForm" layout="vertical">
+        <a-form-item
+          label="Display name"
+          name="displayName"
+          :rules="[{ required: true, message: 'Display name is required.' }]"
+        >
+          <a-input v-model:value="createForm.displayName" placeholder="Creator name" />
+        </a-form-item>
+
+        <a-form-item label="Full name" name="fullName">
+          <a-input v-model:value="createForm.fullName" placeholder="Optional full name" />
+        </a-form-item>
+
+        <div class="form-grid">
+          <a-form-item label="Platform" name="platform">
+            <a-select v-model:value="createForm.platform" :options="platformOptions" />
+          </a-form-item>
+          <a-form-item label="Username" name="username">
+            <a-input v-model:value="createForm.username" placeholder="handle" />
+          </a-form-item>
+        </div>
+
+        <a-form-item label="Profile URL" name="profileUrl">
+          <a-input v-model:value="createForm.profileUrl" placeholder="https://..." />
+        </a-form-item>
+
+        <div class="form-grid">
+          <a-form-item label="Followers" name="followerCount">
+            <a-input-number
+              v-model:value="createForm.followerCount"
+              :min="0"
+              :precision="0"
+              class="full-width"
+              placeholder="0"
+            />
+          </a-form-item>
+          <a-form-item label="Email" name="email">
+            <a-input v-model:value="createForm.email" placeholder="name@example.com" />
+          </a-form-item>
+        </div>
+
+        <div class="form-grid">
+          <a-form-item label="Country" name="country">
+            <a-input v-model:value="createForm.country" placeholder="US" />
+          </a-form-item>
+          <a-form-item label="City" name="city">
+            <a-input v-model:value="createForm.city" placeholder="New York" />
+          </a-form-item>
+        </div>
+
+        <a-form-item label="Add to campaign" name="targetCampaignId">
+          <a-select v-model:value="createForm.targetCampaignId" :options="campaignSelectOptions" />
+        </a-form-item>
+
+        <a-form-item label="Notes" name="notes">
+          <a-textarea v-model:value="createForm.notes" :rows="3" placeholder="Global library notes" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </section>
 </template>
 
 <style scoped>
-.library-grid {
+.influencer-library-page {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
-  gap: 20px;
+  gap: 18px;
 }
 
-.section-heading {
+.page-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
-}
-
-.section-heading.compact {
-  margin-bottom: 12px;
 }
 
 .eyebrow {
   margin: 0 0 6px;
-  color: #667066;
+  color: #5e6974;
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
-}
-
-h1,
-h2 {
-  margin: 0;
-  color: #242826;
 }
 
 h1 {
-  font-size: 28px;
+  margin: 0;
+  color: #20262d;
+  font-size: 30px;
 }
 
-h2 {
-  font-size: 20px;
+.page-description {
+  max-width: 720px;
+  margin: 8px 0 0;
+  color: #58636f;
+  line-height: 1.5;
 }
 
-.search-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 10px;
-  margin-bottom: 14px;
 }
 
-.manual-panel,
-.table-wrap {
-  border: 1px solid #dbe3ee;
+.page-alert {
   border-radius: 8px;
-  background: #ffffff;
 }
 
-.manual-panel {
-  padding: 16px;
-}
-
-.manual-form {
+.summary-grid {
   display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
   gap: 12px;
 }
 
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-label {
+.summary-grid :deep(.ant-card-body) {
   display: grid;
   gap: 6px;
-  color: #515b54;
-  font-size: 12px;
+}
+
+.summary-grid span,
+.muted {
+  color: #697582;
+}
+
+.summary-grid strong {
+  color: #20262d;
+  font-size: 26px;
+}
+
+.table-card {
+  overflow: hidden;
+}
+
+.table-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.table-toolbar-controls,
+.table-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.table-toolbar-controls {
+  flex-wrap: wrap;
+}
+
+.table-toolbar-actions {
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+
+.search-input {
+  width: min(300px, 100%);
+}
+
+.platform-filter {
+  width: 160px;
+}
+
+.location-filter {
+  width: 130px;
+}
+
+.archive-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #4e5965;
+  white-space: nowrap;
+}
+
+.influencer-cell,
+.contact-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.influencer-cell a {
+  color: #175fcb;
   font-weight: 700;
 }
 
-input,
-select,
-textarea {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 0 10px;
-  background: #ffffff;
-  color: #242826;
-  font: inherit;
+.influencer-cell span,
+.contact-cell small {
+  max-width: 220px;
+  overflow: hidden;
+  color: #697582;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-input,
-select {
-  height: 36px;
-}
-
-textarea {
-  padding-top: 9px;
-  resize: vertical;
-}
-
-.primary-button,
-.secondary-button {
-  min-height: 36px;
-  border-radius: 8px;
-  padding: 0 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.primary-button {
-  border: 1px solid #215f4e;
-  background: #215f4e;
-  color: #ffffff;
-}
-
-.secondary-button {
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #303632;
-}
-
-.primary-button:disabled,
-.secondary-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.table-wrap {
-  overflow-x: auto;
-}
-
-table {
-  width: 100%;
-  min-width: 720px;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 11px 12px;
-  border-bottom: 1px solid #edf1f6;
-  text-align: left;
-}
-
-th {
-  background: #f8fafc;
-  color: #626b64;
-  font-size: 12px;
-  text-transform: uppercase;
-}
-
-.empty-state {
-  display: grid;
+.platform-stack {
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  padding: 36px 12px;
-  color: #657068;
-  text-align: center;
 }
 
-.empty-state strong {
-  color: #303632;
+.contact-cell span {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.error-box,
-.success-box {
-  margin-top: 12px;
-  padding: 10px;
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.45;
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.error-box {
-  border: 1px solid #f1b4ae;
-  background: #fff0ee;
-  color: #9f2d20;
+.full-width {
+  width: 100%;
 }
 
-.success-box {
-  border: 1px solid #9fc7ba;
-  background: #e8f5ef;
-  color: #17634d;
+@media (max-width: 960px) {
+  .page-heading,
+  .table-toolbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .page-heading {
+    display: grid;
+  }
+
+  .page-actions,
+  .table-toolbar-actions {
+    justify-content: flex-start;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .search-input,
+  .platform-filter,
+  .location-filter,
+  .archive-toggle,
+  .table-toolbar-actions,
+  .table-toolbar-actions button {
+    width: 100%;
+  }
 }
 
-@media (max-width: 1020px) {
-  .library-grid {
+@media (max-width: 560px) {
+  .summary-grid,
+  .form-grid {
     grid-template-columns: 1fr;
   }
 }

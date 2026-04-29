@@ -74,6 +74,64 @@ export interface ManualInfluencerResponse {
   contact_count: number
 }
 
+export interface InfluencerPlatformSummary {
+  id: string
+  platform: string
+  username?: string | null
+  profile_url?: string | null
+  follower_count?: number | null
+  engagement_rate?: string | number | null
+  is_primary: boolean
+}
+
+export interface InfluencerPlatformResponse {
+  id: string
+  influencer_id: string
+  platform: string
+  username?: string | null
+  normalized_username?: string | null
+  profile_url?: string | null
+  normalized_profile_url?: string | null
+  follower_count?: number | null
+  engagement_rate?: string | number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface InfluencerContactResponse {
+  id: string
+  influencer_id: string
+  name?: string | null
+  email: string
+  role: string
+  is_primary: boolean
+  source?: string | null
+  notes?: string | null
+  conflict_influencer_ids: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface InfluencerListItem {
+  id: string
+  display_name: string
+  full_name?: string | null
+  country?: string | null
+  city?: string | null
+  primary_platform?: InfluencerPlatformResponse | null
+  platforms: InfluencerPlatformSummary[]
+  follower_count?: number | null
+  primary_contact?: InfluencerContactResponse | null
+  recent_deal_count: number
+  archived_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface InfluencerListResponse {
+  influencers: InfluencerListItem[]
+}
+
 export type ImportSourceType = 'modash_csv' | 'manual'
 export type IngestionConfirmAction = 'create' | 'merge' | 'skip'
 export type IngestionResultStatus =

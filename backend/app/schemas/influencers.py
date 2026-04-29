@@ -147,6 +147,16 @@ class InfluencerPlatformResponse(BaseModel):
     updated_at: datetime
 
 
+class InfluencerPlatformSummary(BaseModel):
+    id: str
+    platform: str
+    username: str | None = None
+    profile_url: str | None = None
+    follower_count: int | None = None
+    engagement_rate: Decimal | None = None
+    is_primary: bool = False
+
+
 class InfluencerContactResponse(BaseModel):
     id: str
     influencer_id: str
@@ -178,6 +188,7 @@ class InfluencerListItem(BaseModel):
     country: str | None = None
     city: str | None = None
     primary_platform: InfluencerPlatformResponse | None = None
+    platforms: list[InfluencerPlatformSummary] = Field(default_factory=list)
     follower_count: int | None = None
     primary_contact: InfluencerContactResponse | None = None
     recent_deal_count: int

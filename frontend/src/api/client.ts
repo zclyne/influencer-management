@@ -4,6 +4,7 @@ import type {
   CampaignListResponse,
   CampaignResponse,
   CampaignStatus,
+  InfluencerListResponse,
   IngestionConfirmRequest,
   IngestionConfirmResponse,
   IngestionPreviewResponse,
@@ -104,6 +105,30 @@ export const createCampaign = (payload: CampaignCreateRequest) =>
 
 export const archiveCampaign = (campaignId: string) =>
   apiRequest<void>(`/campaigns/${campaignId}`, {
+    method: 'DELETE',
+  })
+
+export const listInfluencers = (
+  options: {
+    query?: string
+    platform?: string
+    country?: string
+    city?: string
+    includeArchived?: boolean
+  } = {},
+) =>
+  apiRequest<InfluencerListResponse>(
+    `/influencers${toQueryString({
+      query: options.query,
+      platform: options.platform,
+      country: options.country,
+      city: options.city,
+      include_archived: options.includeArchived,
+    })}`,
+  )
+
+export const archiveInfluencer = (influencerId: string) =>
+  apiRequest<void>(`/influencers/${influencerId}`, {
     method: 'DELETE',
   })
 

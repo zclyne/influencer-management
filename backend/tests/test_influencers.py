@@ -24,6 +24,12 @@ def test_influencer_crud_profile_search_and_archive(
                     "username": "@CreatorOne",
                     "profile_url": "instagram.com/creatorone?utm_source=test",
                     "follower_count": 1000,
+                },
+                {
+                    "platform": "YouTube",
+                    "username": "creatorone",
+                    "profile_url": "https://youtube.com/@creatorone",
+                    "follower_count": 2500,
                 }
             ],
             "contacts": [
@@ -62,7 +68,13 @@ def test_influencer_crud_profile_search_and_archive(
     assert list_response.status_code == 200
     rows = list_response.json()["influencers"]
     assert [row["id"] for row in rows] == [influencer_id]
-    assert rows[0]["primary_platform"]["platform"] == "instagram"
+    assert rows[0]["primary_platform"]["platform"] == "youtube"
+    assert [platform["platform"] for platform in rows[0]["platforms"]] == [
+        "youtube",
+        "instagram",
+    ]
+    assert rows[0]["platforms"][0]["is_primary"] is True
+    assert rows[0]["platforms"][1]["is_primary"] is False
     assert rows[0]["primary_contact"]["email"] == "creator@example.com"
 
     campaign = CampaignRepository(db_session).create(name="Campaign")

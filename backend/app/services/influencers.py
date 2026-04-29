@@ -28,6 +28,7 @@ from app.schemas.influencers import (
     InfluencerPlatformCreateRequest,
     InfluencerPlatformListResponse,
     InfluencerPlatformResponse,
+    InfluencerPlatformSummary,
     InfluencerPlatformUpdateRequest,
     InfluencerResponse,
     InfluencerUpdateRequest,
@@ -499,6 +500,7 @@ class InfluencerService:
     def _influencer_list_item(self, influencer: models.Influencer) -> InfluencerListItem:
         primary_platform = self._primary_platform(influencer.platforms)
         primary_contact = self._primary_contact(influencer.contacts)
+        sorted_platforms = self._sorted_platforms(influencer.platforms)
         return InfluencerListItem(
             id=influencer.id,
             display_name=influencer.display_name,
@@ -508,6 +510,12 @@ class InfluencerService:
             primary_platform=(
                 self._platform_response(primary_platform) if primary_platform else None
             ),
+            platforms=[
+                self._platform_summary(platform, is_primary=platform.id == primary_platform.id)
+                for platform in sorted_platforms
+            ]
+            if primary_platform
+            else [],
             follower_count=primary_platform.follower_count if primary_platform else None,
             primary_contact=self._contact_response(primary_contact) if primary_contact else None,
             recent_deal_count=len([deal for deal in influencer.deals if not deal.archived_at]),
@@ -522,11 +530,17 @@ class InfluencerService:
     ) -> models.InfluencerPlatform | None:
         if not platforms:
             return None
+        return self._sorted_platforms(platforms)[0]
+
+    def _sorted_platforms(
+        self,
+        platforms: list[models.InfluencerPlatform],
+    ) -> list[models.InfluencerPlatform]:
         return sorted(
             platforms,
             key=lambda item: (item.follower_count or 0, item.created_at),
             reverse=True,
-        )[0]
+        )
 
     def _primary_contact(
         self,
@@ -562,6 +576,22 @@ class InfluencerService:
             bio=platform.bio,
             created_at=platform.created_at,
             updated_at=platform.updated_at,
+        )
+
+    def _platform_summary(
+        self,
+        platform: models.InfluencerPlatform,
+        *,
+        is_primary: bool,
+    ) -> InfluencerPlatformSummary:
+        return InfluencerPlatformSummary(
+            id=platform.id,
+            platform=platform.platform,
+            username=platform.username,
+            profile_url=platform.profile_url,
+            follower_count=platform.follower_count,
+            engagement_rate=platform.engagement_rate,
+            is_primary=is_primary,
         )
 
     def _contact_response(self, contact: models.InfluencerContact) -> InfluencerContactResponse:
