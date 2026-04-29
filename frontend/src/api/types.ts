@@ -52,6 +52,33 @@ export interface CampaignListResponse {
   campaigns: CampaignResponse[]
 }
 
+export interface BrandCreateRequest {
+  name: string
+  website?: string | null
+  notes?: string | null
+}
+
+export interface BrandUpdateRequest {
+  name?: string | null
+  website?: string | null
+  notes?: string | null
+}
+
+export interface BrandResponse {
+  id: string
+  name: string
+  website?: string | null
+  notes?: string | null
+  archived_at?: string | null
+  created_at: string
+  updated_at: string
+  campaign_count?: number | null
+}
+
+export interface BrandListResponse {
+  brands: BrandResponse[]
+}
+
 export interface ManualInfluencerInput {
   display_name: string
   full_name?: string | null

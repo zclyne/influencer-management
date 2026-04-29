@@ -1,5 +1,9 @@
 import type {
   ApiErrorResponse,
+  BrandCreateRequest,
+  BrandListResponse,
+  BrandResponse,
+  BrandUpdateRequest,
   CampaignCreateRequest,
   CampaignListResponse,
   CampaignResponse,
@@ -105,6 +109,31 @@ export const createCampaign = (payload: CampaignCreateRequest) =>
 
 export const archiveCampaign = (campaignId: string) =>
   apiRequest<void>(`/campaigns/${campaignId}`, {
+    method: 'DELETE',
+  })
+
+export const listBrands = (options: { query?: string; includeArchived?: boolean } = {}) =>
+  apiRequest<BrandListResponse>(
+    `/brands${toQueryString({
+      query: options.query,
+      include_archived: options.includeArchived,
+    })}`,
+  )
+
+export const createBrand = (payload: BrandCreateRequest) =>
+  apiRequest<BrandResponse>('/brands', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const updateBrand = (brandId: string, payload: BrandUpdateRequest) =>
+  apiRequest<BrandResponse>(`/brands/${brandId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+
+export const archiveBrand = (brandId: string) =>
+  apiRequest<void>(`/brands/${brandId}`, {
     method: 'DELETE',
   })
 

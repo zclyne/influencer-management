@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import BrandList from '../brands/BrandList.vue'
 import CampaignList from '../campaigns/CampaignList.vue'
 import CampaignWorkspace from '../campaigns/CampaignWorkspace.vue'
 import ImportWizard from '../ingestion/ImportWizard.vue'
@@ -57,11 +58,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/brands',
     name: 'brands',
-    component: PlaceholderPage,
-    props: {
-      title: 'Brands',
-      description: 'Brand records and campaign associations will be managed here.',
-    },
+    component: BrandList,
   },
   {
     path: '/templates',
