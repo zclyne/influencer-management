@@ -11,7 +11,7 @@ export const platformOptions = [
   { label: 'Instagram', value: 'instagram' },
   { label: 'TikTok', value: 'tiktok' },
   { label: 'YouTube', value: 'youtube' },
-  { label: 'X / Twitter', value: 'twitter' },
+  { label: 'X / Twitter', value: 'x' },
   { label: 'Twitch', value: 'twitch' },
 ]
 

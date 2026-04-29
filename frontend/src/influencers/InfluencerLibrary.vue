@@ -12,15 +12,19 @@ import { platformOptions, useInfluencers } from './useInfluencers'
 interface ManualInfluencerForm {
   displayName: string
   fullName: string
-  platform: string
-  username: string
-  profileUrl: string
-  followerCount: number | null
+  platforms: ManualInfluencerPlatformForm[]
   email: string
   country: string
   city: string
   notes: string
   targetCampaignId: string
+}
+
+interface ManualInfluencerPlatformForm {
+  key: string
+  platform: string
+  username: string
+  followerCount: number | null
 }
 
 const props = defineProps<{
@@ -34,13 +38,22 @@ const emit = defineEmits<{
 
 const formRef = ref<FormInstance>()
 const createModalOpen = ref(false)
+let platformKeySeed = 0
+
+const newPlatformRow = (): ManualInfluencerPlatformForm => {
+  platformKeySeed += 1
+  return {
+    key: `platform-${platformKeySeed}`,
+    platform: 'instagram',
+    username: '',
+    followerCount: null,
+  }
+}
+
 const createForm = reactive<ManualInfluencerForm>({
   displayName: '',
   fullName: '',
-  platform: 'instagram',
-  username: '',
-  profileUrl: '',
-  followerCount: null,
+  platforms: [newPlatformRow()],
   email: '',
   country: '',
   city: '',
@@ -159,20 +172,30 @@ const platformColor = (platform: string) => {
   if (platform === 'instagram') return 'magenta'
   if (platform === 'tiktok') return 'cyan'
   if (platform === 'youtube') return 'red'
-  if (platform === 'twitter') return 'blue'
+  if (platform === 'x') return 'blue'
   return 'default'
 }
 
 const platformDisplayName = (platform: InfluencerPlatformSummary) =>
   platform.username ? `${platformLabel(platform.platform)} @${platform.username}` : platformLabel(platform.platform)
 
+const normalizeFormUsername = (value: string) => value.trim().replace(/^@+/, '')
+
+const addPlatformRow = () => {
+  createForm.platforms.push(newPlatformRow())
+}
+
+const removePlatformRow = (key: string) => {
+  createForm.platforms = createForm.platforms.filter((platform) => platform.key !== key)
+  if (!createForm.platforms.length) {
+    createForm.platforms.push(newPlatformRow())
+  }
+}
+
 const resetCreateForm = () => {
   createForm.displayName = ''
   createForm.fullName = ''
-  createForm.platform = 'instagram'
-  createForm.username = ''
-  createForm.profileUrl = ''
-  createForm.followerCount = null
+  createForm.platforms = [newPlatformRow()]
   createForm.email = ''
   createForm.country = ''
   createForm.city = ''
@@ -181,16 +204,40 @@ const resetCreateForm = () => {
   formRef.value?.clearValidate()
 }
 
+const buildPlatformPayload = () =>
+  createForm.platforms
+    .map((platform) => ({
+      platform: platform.platform,
+      username: normalizeFormUsername(platform.username),
+      follower_count: platform.followerCount,
+    }))
+    .filter((platform) => platform.username)
+
+const validatePlatformRows = () => {
+  const incompleteMetricRows = createForm.platforms.filter(
+    (platform) => !normalizeFormUsername(platform.username) && platform.followerCount !== null,
+  )
+  if (incompleteMetricRows.length > 0) {
+    message.error('Platform follower count requires a username.')
+    return false
+  }
+
+  const seen = new Set<string>()
+  for (const platform of buildPlatformPayload()) {
+    const key = `${platform.platform}:${platform.username.toLowerCase()}`
+    if (seen.has(key)) {
+      message.error('Duplicate platform usernames are not allowed.')
+      return false
+    }
+    seen.add(key)
+  }
+  return true
+}
+
 const buildCreatePayload = (): ManualInfluencerInput => ({
   display_name: createForm.displayName.trim(),
   full_name: createForm.fullName.trim() || null,
-  platform:
-    createForm.username.trim() || createForm.profileUrl.trim() || createForm.followerCount !== null
-      ? createForm.platform
-      : null,
-  username: createForm.username.trim() || null,
-  profile_url: createForm.profileUrl.trim() || null,
-  follower_count: createForm.followerCount,
+  platforms: buildPlatformPayload(),
   emails: createForm.email.trim() ? [createForm.email.trim()] : [],
   country: createForm.country.trim() || null,
   city: createForm.city.trim() || null,
@@ -205,6 +252,7 @@ const openCreateModal = () => {
 
 const submitCreate = async () => {
   await formRef.value?.validate()
+  if (!validatePlatformRows()) return
 
   try {
     const created = await createInfluencer(buildCreatePayload())
@@ -415,6 +463,7 @@ void loadInfluencers()
       title="New influencer"
       ok-text="Create influencer"
       cancel-text="Cancel"
+      width="720px"
       :confirm-loading="creating"
       destroy-on-close
       @ok="submitCreate"
@@ -432,31 +481,52 @@ void loadInfluencers()
           <a-input v-model:value="createForm.fullName" placeholder="Optional full name" />
         </a-form-item>
 
-        <div class="form-grid">
-          <a-form-item label="Platform" name="platform">
-            <a-select v-model:value="createForm.platform" :options="platformOptions" />
-          </a-form-item>
-          <a-form-item label="Username" name="username">
-            <a-input v-model:value="createForm.username" placeholder="handle" />
-          </a-form-item>
-        </div>
-
-        <a-form-item label="Profile URL" name="profileUrl">
-          <a-input v-model:value="createForm.profileUrl" placeholder="https://..." />
+        <a-form-item label="Platforms">
+          <div class="manual-platform-list">
+            <div
+              v-for="(platform, index) in createForm.platforms"
+              :key="platform.key"
+              class="manual-platform-row"
+            >
+              <a-select
+                v-model:value="platform.platform"
+                class="manual-platform-select"
+                :options="platformOptions"
+              />
+              <a-input
+                v-model:value="platform.username"
+                class="manual-platform-username"
+                placeholder="username"
+              />
+              <a-input-number
+                v-model:value="platform.followerCount"
+                :min="0"
+                :precision="0"
+                class="manual-platform-followers"
+                placeholder="Followers"
+              />
+              <a-button
+                danger
+                type="link"
+                :disabled="createForm.platforms.length === 1 && index === 0"
+                @click="removePlatformRow(platform.key)"
+              >
+                Remove
+              </a-button>
+            </div>
+            <a-button type="dashed" block @click="addPlatformRow">Add platform</a-button>
+            <p class="form-help">
+              Profile URLs are generated from platform and username, then normalized by the backend.
+            </p>
+          </div>
         </a-form-item>
 
         <div class="form-grid">
-          <a-form-item label="Followers" name="followerCount">
-            <a-input-number
-              v-model:value="createForm.followerCount"
-              :min="0"
-              :precision="0"
-              class="full-width"
-              placeholder="0"
-            />
-          </a-form-item>
           <a-form-item label="Email" name="email">
             <a-input v-model:value="createForm.email" placeholder="name@example.com" />
+          </a-form-item>
+          <a-form-item label="Add to campaign" name="targetCampaignId">
+            <a-select v-model:value="createForm.targetCampaignId" :options="campaignSelectOptions" />
           </a-form-item>
         </div>
 
@@ -468,10 +538,6 @@ void loadInfluencers()
             <a-input v-model:value="createForm.city" placeholder="New York" />
           </a-form-item>
         </div>
-
-        <a-form-item label="Add to campaign" name="targetCampaignId">
-          <a-select v-model:value="createForm.targetCampaignId" :options="campaignSelectOptions" />
-        </a-form-item>
 
         <a-form-item label="Notes" name="notes">
           <a-textarea v-model:value="createForm.notes" :rows="3" placeholder="Global library notes" />
@@ -636,6 +702,30 @@ h1 {
   gap: 12px;
 }
 
+.manual-platform-list {
+  display: grid;
+  gap: 10px;
+}
+
+.manual-platform-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(160px, 1fr) minmax(120px, 0.7fr) auto;
+  gap: 10px;
+}
+
+.manual-platform-select,
+.manual-platform-username,
+.manual-platform-followers {
+  width: 100%;
+}
+
+.form-help {
+  margin: 0;
+  color: #697582;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .full-width {
   width: 100%;
 }
@@ -667,6 +757,10 @@ h1 {
   .table-toolbar-actions,
   .table-toolbar-actions button {
     width: 100%;
+  }
+
+  .manual-platform-row {
+    grid-template-columns: 1fr;
   }
 }
 

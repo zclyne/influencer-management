@@ -154,6 +154,65 @@ def test_platform_lifecycle_and_duplicate_conflict(api_client: TestClient) -> No
     }
 
 
+def test_manual_create_supports_multiple_platforms_and_derives_profile_urls(
+    api_client: TestClient,
+) -> None:
+    create_response = api_client.post(
+        "/api/v1/influencers/manual",
+        json={
+            "display_name": "Manual Creator",
+            "platforms": [
+                {
+                    "platform": "instagram",
+                    "username": "@ManualCreator",
+                    "follower_count": 1200,
+                },
+                {
+                    "platform": "youtube",
+                    "username": "manualcreator",
+                    "follower_count": 4500,
+                },
+            ],
+            "emails": ["MANUAL@example.com"],
+        },
+    )
+
+    assert create_response.status_code == 201
+    created = create_response.json()
+    assert created["platform_count"] == 2
+    assert created["contact_count"] == 1
+
+    detail_response = api_client.get(f"/api/v1/influencers/{created['id']}")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    platforms = {platform["platform"]: platform for platform in detail["platforms"]}
+    assert platforms["instagram"]["profile_url"] == "https://instagram.com/manualcreator"
+    assert platforms["instagram"]["normalized_username"] == "manualcreator"
+    assert platforms["youtube"]["profile_url"] == "https://youtube.com/@manualcreator"
+    assert platforms["youtube"]["normalized_profile_url"] == "https://youtube.com/@manualcreator"
+
+    list_response = api_client.get("/api/v1/influencers")
+    assert list_response.status_code == 200
+    row = list_response.json()["influencers"][0]
+    assert [platform["platform"] for platform in row["platforms"]] == ["youtube", "instagram"]
+
+
+def test_manual_create_rejects_duplicate_platform_usernames(api_client: TestClient) -> None:
+    response = api_client.post(
+        "/api/v1/influencers/manual",
+        json={
+            "display_name": "Duplicate Manual Creator",
+            "platforms": [
+                {"platform": "instagram", "username": "@same"},
+                {"platform": "ig", "username": "same"},
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_influencer"
+
+
 def test_contact_lifecycle_normalization_and_conflict_metadata(
     api_client: TestClient,
 ) -> None:

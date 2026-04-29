@@ -55,16 +55,19 @@ export interface CampaignListResponse {
 export interface ManualInfluencerInput {
   display_name: string
   full_name?: string | null
-  platform?: string | null
-  username?: string | null
-  profile_url?: string | null
-  follower_count?: number | null
+  platforms?: ManualInfluencerPlatformInput[]
   country?: string | null
   city?: string | null
   bio?: string | null
   emails?: string[]
   notes?: string | null
   target_campaign_id?: string | null
+}
+
+export interface ManualInfluencerPlatformInput {
+  platform: string
+  username: string
+  follower_count?: number | null
 }
 
 export interface ManualInfluencerResponse {

@@ -1,18 +1,31 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.enums import ContactRole
+
+
+class ManualInfluencerPlatformInput(BaseModel):
+    platform: str = Field(min_length=1, max_length=64)
+    username: str = Field(min_length=1, max_length=255)
+    follower_count: int | None = None
+
+    @model_validator(mode="after")
+    def validate_platform_username(self) -> "ManualInfluencerPlatformInput":
+        self.platform = self.platform.strip()
+        self.username = self.username.strip()
+        if not self.platform:
+            raise ValueError("Platform cannot be blank.")
+        if not self.username:
+            raise ValueError("Platform username cannot be blank.")
+        return self
 
 
 class ManualInfluencerInput(BaseModel):
     display_name: str
     full_name: str | None = None
-    platform: str | None = None
-    username: str | None = None
-    profile_url: str | None = None
-    follower_count: int | None = None
+    platforms: list[ManualInfluencerPlatformInput] = Field(default_factory=list)
     country: str | None = None
     city: str | None = None
     bio: str | None = None

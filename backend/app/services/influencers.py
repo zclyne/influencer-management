@@ -33,6 +33,7 @@ from app.schemas.influencers import (
     InfluencerResponse,
     InfluencerUpdateRequest,
     ManualInfluencerInput,
+    ManualInfluencerPlatformInput,
 )
 from app.services.deals import DealService
 from app.services.dedup import DedupService
@@ -87,6 +88,7 @@ class InfluencerService:
     def manual_create(
         self, payload: ManualInfluencerInput, merge_if_matched: bool = False
     ) -> models.Influencer:
+        self._validate_manual_platforms(payload.platforms)
         row = self._manual_payload_to_row(payload)
         match = self.dedup.match(row)
         action = "merge" if merge_if_matched and match.influencer_id else "create"
@@ -106,6 +108,8 @@ class InfluencerService:
         influencer = self.influencers.get(write_result.influencer_id)
         if influencer is None:
             raise ValueError("Created influencer not found.")
+        for platform_payload in payload.platforms:
+            self._create_or_update_manual_platform(influencer.id, platform_payload)
         if payload.target_campaign_id:
             self.deals.create_if_missing(payload.target_campaign_id, influencer.id)
         self.db.commit()
@@ -440,9 +444,9 @@ class InfluencerService:
         )
 
     def _manual_payload_to_row(self, payload: ManualInfluencerInput) -> CanonicalInfluencerRow:
-        platform = normalize_platform(payload.platform)
-        normalized_profile_url = normalize_profile_url(payload.profile_url)
-        normalized_username = normalize_username(platform, payload.username or payload.profile_url)
+        primary_platform = (
+            self._manual_platform_values(payload.platforms[0]) if payload.platforms else {}
+        )
         normalized_emails = [
             normalized for email in payload.emails if (normalized := normalize_email(email))
         ]
@@ -455,17 +459,105 @@ class InfluencerService:
             country=payload.country,
             city=payload.city,
             bio=payload.bio,
-            platform=platform,
-            username=payload.username,
-            normalized_username=normalized_username,
-            profile_url=payload.profile_url,
-            normalized_profile_url=normalized_profile_url,
-            follower_count=payload.follower_count,
+            platform=primary_platform.get("platform"),
+            username=primary_platform.get("username"),
+            normalized_username=primary_platform.get("normalized_username"),
+            profile_url=primary_platform.get("profile_url"),
+            normalized_profile_url=primary_platform.get("normalized_profile_url"),
+            follower_count=primary_platform.get("follower_count"),
             contacts=[
                 ContactCandidate(email=email, source="manual")
                 for email in normalized_emails
             ],
         )
+
+    def _manual_platform_values(
+        self,
+        payload: ManualInfluencerPlatformInput,
+    ) -> dict[str, object]:
+        platform = normalize_platform(payload.platform)
+        username = payload.username.strip()
+        normalized_username = normalize_username(platform, username)
+        if not platform or not normalized_username:
+            raise InfluencerValidationError(
+                "Manual platform requires a platform and username.",
+                details={"platform": payload.platform, "username": payload.username},
+            )
+        if any(char.isspace() for char in normalized_username):
+            raise InfluencerValidationError(
+                "Manual platform username cannot contain whitespace.",
+                details={"platform": payload.platform, "username": payload.username},
+            )
+        profile_url = self._profile_url_for_platform(platform, normalized_username)
+        return {
+            "platform": platform,
+            "username": username.removeprefix("@").strip(),
+            "normalized_username": normalized_username,
+            "profile_url": profile_url,
+            "normalized_profile_url": normalize_profile_url(profile_url),
+            "follower_count": payload.follower_count,
+        }
+
+    def _validate_manual_platforms(
+        self,
+        platforms: list[ManualInfluencerPlatformInput],
+    ) -> None:
+        seen = set()
+        for platform_payload in platforms:
+            values = self._manual_platform_values(platform_payload)
+            key = (values["platform"], values["normalized_username"])
+            if key in seen:
+                raise InfluencerValidationError(
+                    "Duplicate manual platform username.",
+                    details={
+                        "platform": values["platform"],
+                        "username": values["normalized_username"],
+                    },
+                )
+            seen.add(key)
+
+    def _profile_url_for_platform(self, platform: str, normalized_username: str) -> str | None:
+        if platform == "instagram":
+            return f"https://instagram.com/{normalized_username}"
+        if platform == "tiktok":
+            return f"https://tiktok.com/@{normalized_username}"
+        if platform == "youtube":
+            return f"https://youtube.com/@{normalized_username}"
+        if platform == "x":
+            return f"https://x.com/{normalized_username}"
+        if platform == "twitch":
+            return f"https://twitch.tv/{normalized_username}"
+        return None
+
+    def _create_or_update_manual_platform(
+        self,
+        influencer_id: str,
+        payload: ManualInfluencerPlatformInput,
+    ) -> models.InfluencerPlatform:
+        values = self._manual_platform_values(payload)
+        platform = str(values["platform"])
+        normalized_profile_url = values.get("normalized_profile_url")
+        normalized_username = values.get("normalized_username")
+        existing = self.platforms.find_for_influencer(
+            influencer_id,
+            platform,
+            normalized_profile_url if isinstance(normalized_profile_url, str) else None,
+            normalized_username if isinstance(normalized_username, str) else None,
+        )
+        if existing:
+            updates = {
+                key: value
+                for key, value in values.items()
+                if value is not None and getattr(existing, key) != value
+            }
+            return self.platforms.update(existing, **updates) if updates else existing
+
+        self._ensure_platform_available(
+            platform,
+            normalized_profile_url if isinstance(normalized_profile_url, str) else None,
+            normalized_username if isinstance(normalized_username, str) else None,
+        )
+        return self.platforms.create(influencer_id=influencer_id, **values)
 
     def _influencer_response(self, influencer: models.Influencer) -> InfluencerResponse:
         return InfluencerResponse(
