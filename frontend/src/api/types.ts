@@ -88,6 +88,7 @@ export interface ManualInfluencerInput {
   bio?: string | null
   emails?: string[]
   notes?: string | null
+  tags?: string[]
   target_campaign_id?: string | null
 }
 
@@ -120,6 +121,7 @@ export interface InfluencerUpdateRequest {
   city?: string | null
   bio?: string | null
   notes?: string | null
+  tags?: string[] | null
 }
 
 export interface InfluencerPlatformCreateRequest {
@@ -245,6 +247,7 @@ export interface InfluencerListItem {
   follower_count?: number | null
   primary_contact?: InfluencerContactResponse | null
   recent_deal_count: number
+  tags: string[]
   archived_at?: string | null
   created_at: string
   updated_at: string
@@ -263,6 +266,7 @@ export interface InfluencerResponse {
   city?: string | null
   bio?: string | null
   notes?: string | null
+  tags: string[]
   archived_at?: string | null
   created_at: string
   updated_at: string

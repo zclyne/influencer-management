@@ -294,6 +294,7 @@ export const listInfluencers = (
     platform?: string
     country?: string
     city?: string
+    tag?: string
     includeArchived?: boolean
   } = {},
 ) =>
@@ -303,6 +304,7 @@ export const listInfluencers = (
       platform: options.platform,
       country: options.country,
       city: options.city,
+      tag: options.tag,
       include_archived: options.includeArchived,
     })}`,
   )

@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy.orm import Session
 
 from app.db import models
@@ -43,6 +45,10 @@ from app.services.influencer_bulk_writer import (
     BulkInfluencerWriteResult,
     InfluencerBulkWriter,
 )
+
+MAX_INFLUENCER_TAGS = 20
+MAX_INFLUENCER_TAG_LENGTH = 32
+INFLUENCER_TAG_PATTERN = re.compile(r"^[\w\s\-/.&]+$", re.UNICODE)
 
 
 class InfluencerServiceError(ServiceError):
@@ -108,6 +114,14 @@ class InfluencerService:
         influencer = self.influencers.get(write_result.influencer_id)
         if influencer is None:
             raise ValueError("Created influencer not found.")
+        influencer_updates: dict[str, object | None] = {}
+        if payload.notes is not None:
+            influencer_updates["notes"] = payload.notes
+        tags = self._clean_tags(payload.tags)
+        if tags:
+            influencer_updates["tags_json"] = tags
+        if influencer_updates:
+            self.influencers.update(influencer, **influencer_updates)
         for platform_payload in payload.platforms:
             self._create_or_update_manual_platform(influencer.id, platform_payload)
         if payload.target_campaign_id:
@@ -125,6 +139,7 @@ class InfluencerService:
             city=payload.city,
             bio=payload.bio,
             notes=payload.notes,
+            tags_json=self._clean_tags(payload.tags) or None,
         )
         for platform_payload in payload.platforms:
             self._create_platform(influencer.id, platform_payload)
@@ -140,9 +155,11 @@ class InfluencerService:
         platform: str | None = None,
         country: str | None = None,
         city: str | None = None,
+        tag: str | None = None,
         include_archived: bool = False,
     ) -> InfluencerListResponse:
         normalized_platform = normalize_platform(platform)
+        normalized_tag = self._normalize_tag_filter(tag)
         influencers = self.influencers.list(
             query=query,
             platform=normalized_platform,
@@ -150,6 +167,13 @@ class InfluencerService:
             city=city,
             include_archived=include_archived,
         )
+        if normalized_tag:
+            normalized_tag_key = normalized_tag.casefold()
+            influencers = [
+                influencer
+                for influencer in influencers
+                if normalized_tag_key in {tag.casefold() for tag in self._tags(influencer)}
+            ]
         return InfluencerListResponse(
             influencers=[self._influencer_list_item(influencer) for influencer in influencers]
         )
@@ -175,6 +199,8 @@ class InfluencerService:
                 details={"influencer_id": influencer_id},
             )
         values = payload.model_dump(exclude_unset=True)
+        if "tags" in values:
+            values["tags_json"] = self._clean_tags(values.pop("tags")) or None
         if values:
             self.influencers.update(influencer, **values)
             self.db.commit()
@@ -326,6 +352,56 @@ class InfluencerService:
         self, commands: list[BulkInfluencerWriteCommand]
     ) -> BulkInfluencerWriteResult:
         return self.bulk_writer.write(commands)
+
+    def _normalize_tag_filter(self, tag: str | None) -> str | None:
+        if tag is None:
+            return None
+        normalized = " ".join(tag.strip().split())
+        if not normalized:
+            return None
+        return self._clean_tag(normalized)
+
+    def _clean_tags(self, tags: list[str] | None) -> list[str]:
+        if not tags:
+            return []
+
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for tag in tags:
+            clean_tag = self._clean_tag(tag)
+            key = clean_tag.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(clean_tag)
+            if len(cleaned) > MAX_INFLUENCER_TAGS:
+                raise InfluencerValidationError(
+                    "Influencer can have at most 20 tags.",
+                    details={"max_tags": MAX_INFLUENCER_TAGS},
+                )
+        return cleaned
+
+    def _clean_tag(self, tag: str) -> str:
+        cleaned = " ".join(tag.strip().split())
+        if not cleaned:
+            raise InfluencerValidationError("Influencer tag cannot be blank.")
+        if len(cleaned) > MAX_INFLUENCER_TAG_LENGTH:
+            raise InfluencerValidationError(
+                "Influencer tag is too long.",
+                details={"tag": cleaned, "max_length": MAX_INFLUENCER_TAG_LENGTH},
+            )
+        if not INFLUENCER_TAG_PATTERN.fullmatch(cleaned):
+            raise InfluencerValidationError(
+                "Influencer tag contains unsupported characters.",
+                details={
+                    "tag": cleaned,
+                    "allowed_characters": "letters, numbers, spaces, -, _, /, ., &",
+                },
+            )
+        return cleaned
+
+    def _tags(self, influencer: models.Influencer) -> list[str]:
+        return list(influencer.tags_json or [])
 
     def _require_influencer(self, influencer_id: str) -> models.Influencer:
         influencer = self.influencers.get(influencer_id)
@@ -569,6 +645,7 @@ class InfluencerService:
             city=influencer.city,
             bio=influencer.bio,
             notes=influencer.notes,
+            tags=self._tags(influencer),
             archived_at=influencer.archived_at,
             created_at=influencer.created_at,
             updated_at=influencer.updated_at,
@@ -611,6 +688,7 @@ class InfluencerService:
             follower_count=primary_platform.follower_count if primary_platform else None,
             primary_contact=self._contact_response(primary_contact) if primary_contact else None,
             recent_deal_count=len([deal for deal in influencer.deals if not deal.archived_at]),
+            tags=self._tags(influencer),
             archived_at=influencer.archived_at,
             created_at=influencer.created_at,
             updated_at=influencer.updated_at,

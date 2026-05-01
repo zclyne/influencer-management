@@ -29,6 +29,38 @@ const normalizeQueryValue = (value: string) => {
   return trimmed || undefined
 }
 
+const maxInfluencerTags = 20
+const maxInfluencerTagLength = 32
+const influencerTagPattern = /^[\p{L}\p{N}_\s\-/.&]+$/u
+
+export const normalizeInfluencerTags = (tags: string[] = []) => {
+  const normalizedTags: string[] = []
+  const seen = new Set<string>()
+  for (const tag of tags) {
+    const normalized = tag.trim().replace(/\s+/g, ' ')
+    if (!normalized) {
+      throw new Error('Tags cannot be blank.')
+    }
+    if (normalized.length > maxInfluencerTagLength) {
+      throw new Error(`Tags must be ${maxInfluencerTagLength} characters or fewer.`)
+    }
+    if (!influencerTagPattern.test(normalized)) {
+      throw new Error('Tags can use letters, numbers, spaces, -, _, /, ., and &.')
+    }
+
+    const key = normalized.toLocaleLowerCase()
+    if (!seen.has(key)) {
+      seen.add(key)
+      normalizedTags.push(normalized)
+      if (normalizedTags.length > maxInfluencerTags) {
+        throw new Error(`Use ${maxInfluencerTags} tags or fewer.`)
+      }
+    }
+  }
+
+  return normalizedTags
+}
+
 export const useInfluencers = () => {
   const influencers = ref<InfluencerListItem[]>([])
   const loading = ref(false)
@@ -39,6 +71,7 @@ export const useInfluencers = () => {
   const platformFilter = ref<string | undefined>()
   const countryFilter = ref('')
   const cityFilter = ref('')
+  const tagFilter = ref<string | undefined>()
   const includeArchived = ref(false)
   const selectedRowKeys = ref<string[]>([])
 
@@ -52,6 +85,7 @@ export const useInfluencers = () => {
         platform: platformFilter.value,
         country: normalizeQueryValue(countryFilter.value),
         city: normalizeQueryValue(cityFilter.value),
+        tag: tagFilter.value,
         includeArchived: includeArchived.value,
       })
       influencers.value = response.influencers
@@ -84,6 +118,13 @@ export const useInfluencers = () => {
 
   const archivedInfluencerCount = computed(
     () => influencers.value.filter((influencer) => influencer.archived_at).length,
+  )
+
+  const tagOptions = computed(() =>
+    Array.from(new Set(influencers.value.flatMap((influencer) => influencer.tags))).map((tag) => ({
+      label: tag,
+      value: tag,
+    })),
   )
 
   const createInfluencer = async (payload: ManualInfluencerInput) => {
@@ -146,7 +187,7 @@ export const useInfluencers = () => {
     }
   }
 
-  watch([searchText, platformFilter, countryFilter, cityFilter, includeArchived], () => {
+  watch([searchText, platformFilter, countryFilter, cityFilter, tagFilter, includeArchived], () => {
     selectedRowKeys.value = []
     void loadInfluencers()
   })
@@ -166,12 +207,14 @@ export const useInfluencers = () => {
     platformFilter,
     countryFilter,
     cityFilter,
+    tagFilter,
     includeArchived,
     selectedRowKeys,
     activeInfluencerCount,
     platformCount,
     withContactCount,
     archivedInfluencerCount,
+    tagOptions,
     loadInfluencers,
     createInfluencer,
     archiveInfluencer,

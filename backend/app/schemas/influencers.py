@@ -31,6 +31,7 @@ class ManualInfluencerInput(BaseModel):
     bio: str | None = None
     emails: list[str] = Field(default_factory=list)
     notes: str | None = None
+    tags: list[str] = Field(default_factory=list)
     target_campaign_id: str | None = None
 
     @field_validator("display_name")
@@ -104,6 +105,7 @@ class InfluencerCreateRequest(BaseModel):
     city: str | None = Field(default=None, max_length=128)
     bio: str | None = None
     notes: str | None = None
+    tags: list[str] = Field(default_factory=list)
     platforms: list[InfluencerPlatformCreateRequest] = Field(default_factory=list)
     contacts: list[InfluencerContactCreateRequest] = Field(default_factory=list)
 
@@ -124,6 +126,7 @@ class InfluencerUpdateRequest(BaseModel):
     city: str | None = Field(default=None, max_length=128)
     bio: str | None = None
     notes: str | None = None
+    tags: list[str] | None = None
 
     @field_validator("display_name")
     @classmethod
@@ -205,6 +208,7 @@ class InfluencerListItem(BaseModel):
     follower_count: int | None = None
     primary_contact: InfluencerContactResponse | None = None
     recent_deal_count: int
+    tags: list[str] = Field(default_factory=list)
     archived_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
@@ -219,6 +223,7 @@ class InfluencerResponse(BaseModel):
     city: str | None = None
     bio: str | None = None
     notes: str | None = None
+    tags: list[str] = Field(default_factory=list)
     archived_at: datetime | None = None
     created_at: datetime
     updated_at: datetime

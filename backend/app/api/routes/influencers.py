@@ -51,15 +51,20 @@ def list_influencers(
     platform: str | None = None,
     country: str | None = None,
     city: str | None = None,
+    tag: str | None = None,
     include_archived: bool = False,
-) -> InfluencerListResponse:
-    return InfluencerService(db).list_influencers(
-        query=query,
-        platform=platform,
-        country=country,
-        city=city,
-        include_archived=include_archived,
-    )
+) -> InfluencerListResponse | JSONResponse:
+    try:
+        return InfluencerService(db).list_influencers(
+            query=query,
+            platform=platform,
+            country=country,
+            city=city,
+            tag=tag,
+            include_archived=include_archived,
+        )
+    except InfluencerServiceError as exc:
+        return service_error_response(exc)
 
 
 @router.get("/{influencer_id}", response_model=InfluencerResponse, responses=ERROR_RESPONSES)

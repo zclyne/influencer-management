@@ -7,7 +7,12 @@ import type {
   InfluencerPlatformSummary,
   ManualInfluencerInput,
 } from '../api/types'
-import { platformColor, platformOptions, useInfluencers } from './useInfluencers'
+import {
+  normalizeInfluencerTags,
+  platformColor,
+  platformOptions,
+  useInfluencers,
+} from './useInfluencers'
 
 interface ManualInfluencerForm {
   displayName: string
@@ -17,6 +22,7 @@ interface ManualInfluencerForm {
   country: string
   city: string
   notes: string
+  tags: string[]
   targetCampaignId: string
 }
 
@@ -58,6 +64,7 @@ const createForm = reactive<ManualInfluencerForm>({
   country: '',
   city: '',
   notes: '',
+  tags: [],
   targetCampaignId: props.selectedCampaignId ?? '',
 })
 
@@ -71,12 +78,14 @@ const {
   platformFilter,
   countryFilter,
   cityFilter,
+  tagFilter,
   includeArchived,
   selectedRowKeys,
   activeInfluencerCount,
   platformCount,
   withContactCount,
   archivedInfluencerCount,
+  tagOptions,
   loadInfluencers,
   createInfluencer,
   archiveInfluencer,
@@ -104,6 +113,11 @@ const columns: TableColumnsType<InfluencerListItem> = [
     title: 'Location',
     key: 'location',
     width: 180,
+  },
+  {
+    title: 'Tags',
+    key: 'tags',
+    width: 220,
   },
   {
     title: 'Deals',
@@ -191,6 +205,7 @@ const resetCreateForm = () => {
   createForm.country = ''
   createForm.city = ''
   createForm.notes = ''
+  createForm.tags = []
   createForm.targetCampaignId = props.selectedCampaignId ?? ''
   formRef.value?.clearValidate()
 }
@@ -233,6 +248,7 @@ const buildCreatePayload = (): ManualInfluencerInput => ({
   country: createForm.country.trim() || null,
   city: createForm.city.trim() || null,
   notes: createForm.notes.trim() || null,
+  tags: normalizeInfluencerTags(createForm.tags),
   target_campaign_id: createForm.targetCampaignId || null,
 })
 
@@ -253,8 +269,10 @@ const submitCreate = async () => {
     message.success(`${created.display_name} created.`)
     createModalOpen.value = false
     resetCreateForm()
-  } catch {
-    message.error('Influencer could not be created.')
+  } catch (createError) {
+    message.error(
+      createError instanceof Error ? createError.message : 'Influencer could not be created.',
+    )
   }
 }
 
@@ -361,6 +379,13 @@ void loadInfluencers()
           />
           <a-input v-model:value="countryFilter" class="location-filter" allow-clear placeholder="Country" />
           <a-input v-model:value="cityFilter" class="location-filter" allow-clear placeholder="City" />
+          <a-select
+            v-model:value="tagFilter"
+            class="tag-filter"
+            allow-clear
+            placeholder="All tags"
+            :options="tagOptions"
+          />
           <label class="archive-toggle">
             <span>Include deleted</span>
             <a-switch v-model:checked="includeArchived" />
@@ -385,7 +410,7 @@ void loadInfluencers()
         :pagination="{ pageSize: 10, showSizeChanger: true }"
         :row-key="(record: InfluencerListItem) => record.id"
         :row-selection="rowSelection"
-        :scroll="{ x: 1160 }"
+        :scroll="{ x: 1380 }"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'influencer'">
@@ -422,6 +447,13 @@ void loadInfluencers()
 
           <template v-else-if="column.key === 'location'">
             <span>{{ formatLocation(record) }}</span>
+          </template>
+
+          <template v-else-if="column.key === 'tags'">
+            <div v-if="record.tags.length" class="tag-stack">
+              <a-tag v-for="tag in record.tags" :key="tag">{{ tag }}</a-tag>
+            </div>
+            <span v-else class="muted">No tags</span>
           </template>
 
           <template v-else-if="column.key === 'deals'">
@@ -531,6 +563,16 @@ void loadInfluencers()
 
         <a-form-item label="Notes" name="notes">
           <a-textarea v-model:value="createForm.notes" :rows="3" placeholder="Global library notes" />
+        </a-form-item>
+
+        <a-form-item label="Tags" name="tags">
+          <a-select
+            v-model:value="createForm.tags"
+            mode="tags"
+            placeholder="Add global tags"
+            :max-tag-count="5"
+          />
+          <p class="form-help">Use up to 20 tags. Tags support letters, numbers, spaces, -, _, /, ., and &.</p>
         </a-form-item>
       </a-form>
     </a-modal>
@@ -643,7 +685,8 @@ h1 {
   width: min(300px, 100%);
 }
 
-.platform-filter {
+.platform-filter,
+.tag-filter {
   width: 160px;
 }
 
@@ -679,7 +722,8 @@ h1 {
   white-space: nowrap;
 }
 
-.platform-stack {
+.platform-stack,
+.tag-stack {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -748,6 +792,7 @@ h1 {
 
   .search-input,
   .platform-filter,
+  .tag-filter,
   .location-filter,
   .archive-toggle,
   .table-toolbar-actions,

@@ -18,6 +18,7 @@ def test_influencer_crud_profile_search_and_archive(
             "city": "New York",
             "bio": "Bio",
             "notes": "Global notes",
+            "tags": ["VIP", " vip ", "Travel  Creator"],
             "platforms": [
                 {
                     "platform": "IG",
@@ -51,19 +52,21 @@ def test_influencer_crud_profile_search_and_archive(
     assert created["platforms"][0]["normalized_profile_url"] == "https://instagram.com/creatorone"
     assert created["contacts"][0]["email"] == "creator@example.com"
     assert created["contacts"][0]["is_primary"] is True
+    assert created["tags"] == ["VIP", "Travel Creator"]
 
     influencer_id = created["id"]
     patch_response = api_client.patch(
         f"/api/v1/influencers/{influencer_id}",
-        json={"city": "Brooklyn", "notes": "Updated notes"},
+        json={"city": "Brooklyn", "notes": "Updated notes", "tags": ["Paid", "Travel/Family"]},
     )
     assert patch_response.status_code == 200
     assert patch_response.json()["city"] == "Brooklyn"
     assert patch_response.json()["notes"] == "Updated notes"
+    assert patch_response.json()["tags"] == ["Paid", "Travel/Family"]
 
     list_response = api_client.get(
         "/api/v1/influencers",
-        params={"query": "creator", "platform": "instagram", "country": "US"},
+        params={"query": "creator", "platform": "instagram", "country": "US", "tag": "paid"},
     )
     assert list_response.status_code == 200
     rows = list_response.json()["influencers"]
@@ -76,6 +79,7 @@ def test_influencer_crud_profile_search_and_archive(
     assert rows[0]["platforms"][0]["is_primary"] is True
     assert rows[0]["platforms"][1]["is_primary"] is False
     assert rows[0]["primary_contact"]["email"] == "creator@example.com"
+    assert rows[0]["tags"] == ["Paid", "Travel/Family"]
 
     campaign = CampaignRepository(db_session).create(name="Campaign")
     DealRepository(db_session).create(campaign_id=campaign.id, influencer_id=influencer_id)
@@ -84,6 +88,7 @@ def test_influencer_crud_profile_search_and_archive(
     detail_response = api_client.get(f"/api/v1/influencers/{influencer_id}")
     assert detail_response.status_code == 200
     assert detail_response.json()["deals"][0]["campaign_name"] == "Campaign"
+    assert detail_response.json()["tags"] == ["Paid", "Travel/Family"]
 
     delete_response = api_client.delete(f"/api/v1/influencers/{influencer_id}")
     assert delete_response.status_code == 204
@@ -102,6 +107,39 @@ def test_influencer_crud_profile_search_and_archive(
     archived = db_session.get(Influencer, influencer_id)
     assert archived is not None
     assert archived.archived_at is not None
+
+
+def test_influencer_tags_are_validated(api_client: TestClient) -> None:
+    too_many_tags_response = api_client.post(
+        "/api/v1/influencers",
+        json={
+            "display_name": "Creator With Too Many Tags",
+            "tags": [f"tag-{index}" for index in range(21)],
+        },
+    )
+    assert too_many_tags_response.status_code == 422
+    assert too_many_tags_response.json()["code"] == "invalid_influencer"
+
+    long_tag_response = api_client.post(
+        "/api/v1/influencers",
+        json={"display_name": "Creator With Long Tag", "tags": ["x" * 33]},
+    )
+    assert long_tag_response.status_code == 422
+    assert long_tag_response.json()["code"] == "invalid_influencer"
+
+    unsupported_tag_response = api_client.post(
+        "/api/v1/influencers",
+        json={"display_name": "Creator With Bad Tag", "tags": ["paid#vip"]},
+    )
+    assert unsupported_tag_response.status_code == 422
+    assert unsupported_tag_response.json()["code"] == "invalid_influencer"
+
+    blank_tag_response = api_client.post(
+        "/api/v1/influencers",
+        json={"display_name": "Creator With Blank Tag", "tags": [" "]},
+    )
+    assert blank_tag_response.status_code == 422
+    assert blank_tag_response.json()["code"] == "invalid_influencer"
 
 
 def test_platform_lifecycle_and_duplicate_conflict(api_client: TestClient) -> None:
@@ -174,6 +212,7 @@ def test_manual_create_supports_multiple_platforms_and_derives_profile_urls(
                 },
             ],
             "emails": ["MANUAL@example.com"],
+            "tags": ["Manual", "Imported"],
         },
     )
 
@@ -190,6 +229,7 @@ def test_manual_create_supports_multiple_platforms_and_derives_profile_urls(
     assert platforms["instagram"]["normalized_username"] == "manualcreator"
     assert platforms["youtube"]["profile_url"] == "https://youtube.com/@manualcreator"
     assert platforms["youtube"]["normalized_profile_url"] == "https://youtube.com/@manualcreator"
+    assert detail["tags"] == ["Manual", "Imported"]
 
     list_response = api_client.get("/api/v1/influencers")
     assert list_response.status_code == 200

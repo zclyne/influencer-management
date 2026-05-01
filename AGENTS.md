@@ -65,6 +65,7 @@ Current completed plan files:
 - `plan/completed/email-context-linking.md`
 - `plan/completed/export-reporting.md`
 - `plan/completed/frontend-workbench.md`
+- `plan/completed/influencer-notes-tags.md`
 - `plan/completed/influencer-library-crud.md`
 - `plan/completed/local-file-management.md`
 - `plan/completed/outreach-template-drafting.md`

@@ -98,6 +98,7 @@ class Influencer(TimestampMixin, ArchiveMixin, Base):
     city: Mapped[str | None] = mapped_column(String(128), nullable=True)
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags_json: Mapped[list[str] | None] = mapped_column(SAJSON, nullable=True)
 
     platforms: Mapped[list["InfluencerPlatform"]] = relationship(
         back_populates="influencer", cascade="all, delete-orphan"

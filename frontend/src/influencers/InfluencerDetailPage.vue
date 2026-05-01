@@ -11,7 +11,7 @@ import type {
   InfluencerPlatformResponse,
   InfluencerUpdateRequest,
 } from '../api/types'
-import { platformColor, platformOptions } from './useInfluencers'
+import { normalizeInfluencerTags, platformColor, platformOptions } from './useInfluencers'
 import { useInfluencerDetail } from './useInfluencerDetail'
 
 interface ProfileForm {
@@ -20,7 +20,6 @@ interface ProfileForm {
   country: string
   city: string
   bio: string
-  notes: string
 }
 
 interface PlatformForm {
@@ -41,14 +40,21 @@ interface ContactForm {
   notes: string
 }
 
+interface TagsForm {
+  tags: string[]
+}
+
 const route = useRoute()
 const influencerId = computed(() => String(route.params.influencerId ?? ''))
 
 const profileFormRef = ref<FormInstance>()
+const notesFormRef = ref<FormInstance>()
 const platformFormRef = ref<FormInstance>()
 const contactFormRef = ref<FormInstance>()
 
 const profileModalOpen = ref(false)
+const notesModalOpen = ref(false)
+const tagsModalOpen = ref(false)
 const platformModalOpen = ref(false)
 const contactModalOpen = ref(false)
 const editingPlatform = ref<InfluencerPlatformResponse | null>(null)
@@ -77,7 +83,14 @@ const profileForm = reactive<ProfileForm>({
   country: '',
   city: '',
   bio: '',
+})
+
+const notesForm = reactive({
   notes: '',
+})
+
+const tagsForm = reactive<TagsForm>({
+  tags: [],
 })
 
 const platformForm = reactive<PlatformForm>({
@@ -277,8 +290,16 @@ const resetProfileForm = () => {
   profileForm.country = influencer.value?.country ?? ''
   profileForm.city = influencer.value?.city ?? ''
   profileForm.bio = influencer.value?.bio ?? ''
-  profileForm.notes = influencer.value?.notes ?? ''
   profileFormRef.value?.clearValidate()
+}
+
+const resetNotesForm = () => {
+  notesForm.notes = influencer.value?.notes ?? ''
+  notesFormRef.value?.clearValidate()
+}
+
+const resetTagsForm = () => {
+  tagsForm.tags = [...(influencer.value?.tags ?? [])]
 }
 
 const resetPlatformForm = () => {
@@ -304,6 +325,16 @@ const resetContactForm = () => {
 const openProfileEdit = () => {
   resetProfileForm()
   profileModalOpen.value = true
+}
+
+const openNotesEdit = () => {
+  resetNotesForm()
+  notesModalOpen.value = true
+}
+
+const openTagsEdit = () => {
+  resetTagsForm()
+  tagsModalOpen.value = true
 }
 
 const openCreatePlatform = () => {
@@ -346,7 +377,6 @@ const buildProfilePayload = (): InfluencerUpdateRequest => ({
   country: trimOrNull(profileForm.country),
   city: trimOrNull(profileForm.city),
   bio: trimOrNull(profileForm.bio),
-  notes: trimOrNull(profileForm.notes),
 })
 
 const buildPlatformPayload = (): InfluencerPlatformCreateRequest => ({
@@ -376,6 +406,29 @@ const submitProfile = async () => {
     profileModalOpen.value = false
   } catch {
     message.error('Influencer could not be updated.')
+  }
+}
+
+const submitNotes = async () => {
+  await notesFormRef.value?.validate()
+
+  try {
+    await updateProfile({ notes: trimOrNull(notesForm.notes) })
+    message.success('Notes updated.')
+    notesModalOpen.value = false
+  } catch {
+    message.error('Notes could not be saved.')
+  }
+}
+
+const submitTags = async () => {
+  try {
+    const tags = normalizeInfluencerTags(tagsForm.tags)
+    await updateProfile({ tags })
+    message.success('Tags updated.')
+    tagsModalOpen.value = false
+  } catch (tagError) {
+    message.error(tagError instanceof Error ? tagError.message : 'Tags could not be saved.')
   }
 }
 
@@ -523,13 +576,30 @@ void loadInfluencerDetail()
               <a-descriptions-item label="Location">
                 {{ locationLabel }}
               </a-descriptions-item>
-              <a-descriptions-item label="Notes">
-                {{ influencer.notes || 'No global notes.' }}
-              </a-descriptions-item>
               <a-descriptions-item label="Updated">
                 {{ formatDate(influencer.updated_at) }}
               </a-descriptions-item>
             </a-descriptions>
+          </a-card>
+
+          <a-card class="section-card">
+            <template #title>Notes</template>
+            <template #extra>
+              <a-button @click="openNotesEdit">Edit</a-button>
+            </template>
+            <p v-if="influencer.notes" class="notes-content">{{ influencer.notes }}</p>
+            <span v-else class="muted">No notes yet.</span>
+          </a-card>
+
+          <a-card class="section-card">
+            <template #title>Tags</template>
+            <template #extra>
+              <a-button @click="openTagsEdit">Edit</a-button>
+            </template>
+            <div v-if="influencer.tags.length" class="tag-row">
+              <a-tag v-for="tag in influencer.tags" :key="tag">{{ tag }}</a-tag>
+            </div>
+            <span v-else class="muted">No tags</span>
           </a-card>
 
           <a-card class="section-card platform-card">
@@ -709,8 +779,43 @@ void loadInfluencerDetail()
         <a-form-item label="Bio" name="bio">
           <a-textarea v-model:value="profileForm.bio" :rows="3" />
         </a-form-item>
-        <a-form-item label="Global notes" name="notes">
-          <a-textarea v-model:value="profileForm.notes" :rows="3" />
+      </a-form>
+    </a-modal>
+
+    <a-modal
+      v-model:open="notesModalOpen"
+      title="Edit notes"
+      ok-text="Save"
+      cancel-text="Cancel"
+      :confirm-loading="mutating"
+      destroy-on-close
+      @ok="submitNotes"
+    >
+      <a-form ref="notesFormRef" :model="notesForm" layout="vertical">
+        <a-form-item label="Notes" name="notes">
+          <a-textarea v-model:value="notesForm.notes" :rows="5" placeholder="Global library notes" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal
+      v-model:open="tagsModalOpen"
+      title="Edit tags"
+      ok-text="Save"
+      cancel-text="Cancel"
+      :confirm-loading="mutating"
+      destroy-on-close
+      @ok="submitTags"
+    >
+      <a-form :model="tagsForm" layout="vertical">
+        <a-form-item label="Tags" name="tags">
+          <a-select
+            v-model:value="tagsForm.tags"
+            mode="tags"
+            placeholder="Add global tags"
+            :max-tag-count="8"
+          />
+          <p class="form-help">Use up to 20 tags. Tags support letters, numbers, spaces, -, _, /, ., and &.</p>
         </a-form-item>
       </a-form>
     </a-modal>
@@ -898,6 +1003,20 @@ h1 {
   margin-top: 4px;
   color: #b42318;
   font-size: 12px;
+}
+
+.notes-content {
+  margin: 0;
+  color: #3f4954;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.form-help {
+  margin: 6px 0 0;
+  color: #697582;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .form-grid {
