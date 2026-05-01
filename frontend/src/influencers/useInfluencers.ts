@@ -15,6 +15,15 @@ export const platformOptions = [
   { label: 'Twitch', value: 'twitch' },
 ]
 
+export const platformColor = (platform: string) => {
+  const normalized = platform.toLowerCase()
+  if (normalized === 'instagram') return 'magenta'
+  if (normalized === 'tiktok') return 'cyan'
+  if (normalized === 'youtube') return 'red'
+  if (normalized === 'x') return 'blue'
+  return 'default'
+}
+
 const normalizeQueryValue = (value: string) => {
   const trimmed = value.trim()
   return trimmed || undefined
@@ -124,7 +133,7 @@ export const useInfluencers = () => {
       const archived = results.length - failed
 
       if (failed > 0) {
-        error.value = `${failed} influencer(s) could not be archived.`
+        error.value = `${failed} influencer(s) could not be deleted.`
       }
 
       selectedRowKeys.value = influencerIds.filter(

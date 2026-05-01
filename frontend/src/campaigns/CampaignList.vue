@@ -84,7 +84,6 @@ const columns: TableColumnsType<CampaignResponse> = [
   {
     title: 'Actions',
     key: 'actions',
-    align: 'right',
   },
 ]
 
@@ -175,9 +174,9 @@ const submitCreate = async () => {
 const archiveOne = async (campaign: CampaignResponse) => {
   try {
     await archiveCampaign(campaign.id)
-    message.success(`${campaign.name} archived.`)
+    message.success(`${campaign.name} deleted.`)
   } catch {
-    message.error(`${campaign.name} could not be archived.`)
+    message.error(`${campaign.name} could not be deleted.`)
   }
 }
 
@@ -185,18 +184,18 @@ const confirmBulkArchive = () => {
   if (!selectedRowKeys.value.length) return
 
   Modal.confirm({
-    title: 'Archive selected campaigns?',
-    content: 'Archived campaigns are hidden unless Include archived is turned on.',
-    okText: 'Archive selected',
+    title: 'Delete selected campaigns?',
+    content: 'Deleted campaigns are hidden unless Include deleted is turned on.',
+    okText: 'Delete selected',
     okType: 'danger',
     cancelText: 'Cancel',
     onOk: async () => {
       const result = await archiveSelectedCampaigns()
       if (result.failed) {
-        message.error(`${result.failed} campaign(s) could not be archived.`)
+        message.error(`${result.failed} campaign(s) could not be deleted.`)
       }
       if (result.archived) {
-        message.success(`${result.archived} campaign(s) archived.`)
+        message.success(`${result.archived} campaign(s) deleted.`)
       }
     },
   })
@@ -213,7 +212,6 @@ void loadCampaigns()
   <section class="campaign-list-page">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">Campaigns</p>
         <h1>Campaign list</h1>
         <p class="page-description">
           Open campaigns to manage deals, add influencers from the library, and use campaign-scoped export.
@@ -237,7 +235,7 @@ void loadCampaigns()
         <strong>{{ liveCampaignCount }}</strong>
       </a-card>
       <a-card v-if="includeArchived" size="small">
-        <span>Archived</span>
+        <span>Deleted</span>
         <strong>{{ archivedCampaignCount }}</strong>
       </a-card>
     </div>
@@ -259,7 +257,7 @@ void loadCampaigns()
             :options="statusOptions"
           />
           <label class="archive-toggle">
-            <span>Include archived</span>
+            <span>Include deleted</span>
             <a-switch v-model:checked="includeArchived" />
           </label>
         </div>
@@ -306,7 +304,7 @@ void loadCampaigns()
               <a-tag :color="statusColor(record.status)">
                 {{ statusLabel(record.status) }}
               </a-tag>
-              <a-tag v-if="record.archived_at" color="red">Archived</a-tag>
+              <a-tag v-if="record.archived_at" color="red">Deleted</a-tag>
             </div>
           </template>
 
@@ -321,14 +319,14 @@ void loadCampaigns()
           <template v-else-if="column.key === 'actions'">
             <a-popconfirm
               v-if="!record.archived_at"
-              title="Archive this campaign?"
-              ok-text="Archive"
+              title="Delete this campaign?"
+              ok-text="Delete"
               cancel-text="Cancel"
               @confirm="archiveOne(record)"
             >
               <a-button danger type="link">Delete</a-button>
             </a-popconfirm>
-            <span v-else class="muted">Archived</span>
+            <span v-else class="muted">Deleted</span>
           </template>
         </template>
       </a-table>
@@ -408,14 +406,6 @@ void loadCampaigns()
   gap: 16px;
 }
 
-.eyebrow {
-  margin: 0 0 6px;
-  color: #5e6974;
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
 h1 {
   margin: 0;
   color: #20262d;
@@ -456,6 +446,16 @@ h1 {
 
 .table-card {
   overflow: hidden;
+}
+
+.table-card :deep(.ant-card-body) {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.table-card :deep(.ant-table-wrapper) {
+  max-width: 100%;
+  min-width: 0;
 }
 
 .table-card :deep(.ant-table-pagination) {

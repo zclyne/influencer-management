@@ -47,6 +47,9 @@ Product boundaries:
 - Email is a placeholder-only page until the standalone email workflow is redesigned.
 - Influencer Detail is a standalone page.
 - Deal profile links must reuse the same Influencer Detail page.
+- Detail pages should provide an obvious return path to the parent list or workspace. Prefer
+  Ant Design Vue `Breadcrumb` for paths such as Campaign List -> Campaign Detail, and keep a
+  clear fallback back link when route context is ambiguous.
 
 ## Route Model
 
@@ -64,7 +67,9 @@ Expected route shape:
 - `/templates`
 - `/email`
 
-The `/email` route should render a placeholder only.
+The `/email` route should render a placeholder only for now. It should accept optional route
+query parameters such as `campaignId` later so campaign pages can link into a filtered email
+view without embedding email UI inside campaign detail screens.
 
 ## Code Structure
 
@@ -130,6 +135,8 @@ Layouts:
 - Put page-specific actions in the page header or table toolbar.
 - Use drawer only for side context such as quick deal review.
 - Use full pages for standalone detail workflows such as Influencer Detail and Deal Detail.
+- Detail pages should include breadcrumb navigation near the page header so users can return to
+  the previous list/workspace without relying on browser history.
 
 ## Module Rules
 
@@ -141,6 +148,9 @@ Campaigns:
 - Adding an influencer to a campaign creates a Deal.
 - Do not add a campaign-level import action.
 - Use `Export view` for campaign-scoped export.
+- Campaign detail/workspace pages should not contain a dedicated embedded email panel. Add a
+  page action that links to `/email?campaignId=<campaign_id>` instead; the Email page owns
+  campaign-scoped email filtering.
 
 Influencers:
 
@@ -161,6 +171,8 @@ Import Wizard:
 Email:
 
 - Keep the standalone Email page as a placeholder.
+- By default, Email should represent all email context. When a `campaignId` query parameter is
+  present, the future Email page should filter to email related to that campaign.
 - Deal and Influencer detail pages may reserve space for future email context.
 - Do not build thread timelines, candidate queues, or standalone email workflows until the
   email UX is redesigned.

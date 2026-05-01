@@ -117,7 +117,7 @@ export const useCampaigns = () => {
       const archived = results.length - failed
 
       if (failed > 0) {
-        error.value = `${failed} campaign(s) could not be archived.`
+        error.value = `${failed} campaign(s) could not be deleted.`
       }
 
       selectedRowKeys.value = campaignIds.filter((_, index) => results[index]?.status === 'rejected')

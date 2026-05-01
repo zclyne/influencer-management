@@ -51,6 +51,12 @@ When this design revision is implemented in Figma and reflected in frontend code
 13. Top bar must stay global.
     The top bar should contain page-independent workspace controls or status only. Page-specific actions such as `New campaign`, `New brand`, `New template`, `Import CSV`, `Add from library`, search inputs, and export actions belong inside the page header or table toolbar.
 
+14. Detail pages need an obvious return path.
+    Campaign Detail should make it easy to return to Campaign List, and similar detail pages should make parent navigation explicit. Prefer framework breadcrumbs, such as Campaign List -> Campaign Detail, instead of relying only on browser back behavior.
+
+15. Campaign Detail should not embed a dedicated Email area.
+    Campaign-scoped email review should reuse the standalone Email page. Campaign pages should provide a page action linking to Email with a campaign URL parameter. The Email page defaults to all email, and future implementation can filter to a campaign when a campaign parameter is present.
+
 ## Product Interpretation
 
 The product remains campaign-first:
@@ -111,6 +117,7 @@ Design implications:
 - Use table row selection for bulk delete and a fixed/rightmost actions column for per-row delete.
 - Use clickable primary entity cells for navigation to detail pages, rather than making an entire row ambiguously clickable.
 - Do not use a side preview on Influencer Library that competes with the standalone Influencer Detail page.
+- Use breadcrumb navigation on standalone detail pages so users can return to the parent list or workspace directly.
 - Treat advanced table capabilities as incremental enhancements, not first-pass requirements.
 
 Suitable implementation directions:
@@ -164,6 +171,9 @@ Update the existing Figma file:
 - In Import Wizard, keep preview as the main result panel, not as a duplicated top workflow card.
 - In Import Wizard, do not keep upload and preview as large side-by-side panels after upload; use a compact uploaded-file row and dedicate the page to preview review.
 - Add a short annotation near Campaign export explaining that export is campaign-contextual.
+- Add breadcrumbs to detail page designs, including Campaign Detail back to Campaign List and shared Influencer Detail back to the originating library/workspace where route context is known.
+- Remove any dedicated email panel/section from Campaign Detail designs. Add a Campaign page action such as `Open email` or `View email` that routes to `/email?campaignId=<campaign_id>` instead.
+- Keep the Email page as a placeholder design, but document that it will default to all email and can later filter by URL campaign parameter.
 - Keep all designed controls implementable with existing UI framework primitives.
 - Keep Email as a placeholder only.
 
@@ -196,6 +206,9 @@ Expected code behavior:
 - Treat export API integration as Campaign Workspace behavior.
 - Keep Campaign List focused on campaign selection and management; do not put campaign-specific export there.
 - Keep page-specific create/search/import/export actions out of the global top bar.
+- Detail pages should use Ant Design Vue `Breadcrumb` or an equivalent framework breadcrumb near the page header for parent navigation.
+- Campaign detail/workspace should link to `/email?campaignId=<campaign_id>` for campaign email context instead of embedding a campaign email area.
+- The Email route should tolerate no parameter by showing all email, and tolerate `campaignId` by filtering to campaign-related email when the Email workflow is implemented.
 - In Campaign Workspace, add creators by selecting from the existing Influencer Library; adding an influencer to a campaign creates a Deal.
 - Do not add a Campaign-level import action.
 - In data tables, include row selection and a rightmost delete action column.
@@ -224,6 +237,8 @@ Expected code behavior:
 - Top bar contains only global workspace/status controls; page actions are inside page content.
 - Export is treated as a Campaign sub-feature in both design and code.
 - Email page remains a placeholder, not a full workflow screen.
+- Detail pages include obvious breadcrumb/back navigation to their parent list/workspace.
+- Campaign Detail does not include an embedded email panel and instead links to the Email page with campaign route context.
 - Influencer and Deal screens show creators with multiple platforms.
 - Influencer Detail exists as a standalone page and is reused by Deal profile links.
 - Tables expose single-row delete and multi-select delete via framework table primitives.

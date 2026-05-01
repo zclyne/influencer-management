@@ -25,6 +25,13 @@ def _seed_campaign_and_influencer(db_session: Session) -> tuple[str, str]:
         normalized_username="creatorone",
         follower_count=125000,
     )
+    InfluencerPlatformRepository(db_session).create(
+        influencer_id=influencer.id,
+        platform="tiktok",
+        username="creatorone_tt",
+        normalized_username="creatorone_tt",
+        follower_count=87000,
+    )
     InfluencerContactRepository(db_session).create(
         influencer_id=influencer.id,
         email="creator@example.com",
@@ -57,6 +64,10 @@ def test_create_duplicate_list_update_and_archive_deal(
     assert created["labels"] == ["priority", "paid"]
     assert created["influencer"]["display_name"] == "Creator One"
     assert created["primary_platform"]["follower_count"] == 125000
+    assert [platform["platform"] for platform in created["platforms"]] == [
+        "instagram",
+        "tiktok",
+    ]
     assert created["primary_contact"]["email"] == "creator@example.com"
 
     duplicate_response = api_client.post(

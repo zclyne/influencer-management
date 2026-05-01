@@ -1,157 +1,129 @@
 <script setup lang="ts">
-import StatusBadge from '../shared/StatusBadge.vue'
-import type { WorkbenchDeal } from '../api/types'
+import { RouterLink } from 'vue-router'
+import type { DealPipelineRow, PrimaryPlatformSummary } from '../api/types'
+import { dealStatusLabels } from '../campaigns/useCampaignWorkspace'
+import { platformColor } from '../influencers/useInfluencers'
 
-defineProps<{
+const props = defineProps<{
   open: boolean
   campaignName?: string
-  deal: WorkbenchDeal | null
+  deal: DealPipelineRow | null
 }>()
 
 defineEmits<{
   close: []
 }>()
+
+const formatNumber = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return null
+  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(
+    value,
+  )
+}
+
+const platformLabel = (platform: PrimaryPlatformSummary) => {
+  const name = platform.platform
+  const username = platform.username ? ` @${platform.username}` : ''
+  const followers = formatNumber(platform.follower_count)
+  return `${name}${username}${followers ? ` · ${followers}` : ''}`
+}
+
+const locationLabel = () => {
+  if (!props.deal) return 'Not set'
+  return [props.deal.influencer.city, props.deal.influencer.country].filter(Boolean).join(', ') || 'Not set'
+}
 </script>
 
 <template>
-  <aside v-if="open" class="drawer" aria-label="Deal detail">
-    <div class="drawer-header">
-      <div>
-        <p class="eyebrow">{{ campaignName ?? 'Campaign deal' }}</p>
-        <h2>{{ deal?.influencerName ?? 'Deal detail' }}</h2>
-      </div>
-      <button class="icon-button" type="button" aria-label="Close deal detail" @click="$emit('close')">
-        X
-      </button>
-    </div>
+  <a-drawer
+    :open="open"
+    width="520"
+    placement="right"
+    title="Deal review"
+    destroy-on-close
+    @close="$emit('close')"
+  >
+    <a-empty v-if="!deal" description="Select a deal to review." />
 
-    <section class="panel">
-      <div class="panel-row">
-        <span>Status</span>
-        <StatusBadge :label="deal?.status ?? 'DRAFT'" tone="active" />
-      </div>
-      <div class="panel-row">
-        <span>Next action</span>
-        <strong>{{ deal?.nextAction ?? 'Open once deal pipeline endpoints are available.' }}</strong>
-      </div>
-      <div class="panel-row">
-        <span>Labels</span>
-        <div class="tag-row">
-          <StatusBadge
-            v-for="label in deal?.labels ?? ['campaign-specific']"
-            :key="label"
-            :label="label"
-          />
+    <div v-else class="drawer-content">
+      <section class="profile-block">
+        <h2>{{ deal.influencer.display_name }}</h2>
+        <p>{{ locationLabel() }}</p>
+        <div v-if="deal.platforms.length" class="tag-row">
+          <a-tag
+            v-for="platform in deal.platforms"
+            :key="`${platform.platform}:${platform.username}`"
+            :color="platformColor(platform.platform)"
+          >
+            {{ platformLabel(platform) }}
+          </a-tag>
         </div>
+        <span v-else class="muted">No platforms</span>
+      </section>
+
+      <a-descriptions bordered size="small" :column="1">
+        <a-descriptions-item label="Status">
+          <a-tag>{{ dealStatusLabels[deal.status] }}</a-tag>
+        </a-descriptions-item>
+        <a-descriptions-item label="Primary contact">
+          <span v-if="deal.primary_contact">{{ deal.primary_contact.email }}</span>
+          <span v-else class="muted">No contact</span>
+        </a-descriptions-item>
+        <a-descriptions-item label="Deliverables">
+          {{ deal.deliverables.label ?? 'No deliverables' }}
+        </a-descriptions-item>
+        <a-descriptions-item label="Compensation">
+          {{ deal.compensation.label ?? 'No compensation items' }}
+        </a-descriptions-item>
+        <a-descriptions-item label="Email threads">
+          {{ deal.email_threads.thread_count }}
+        </a-descriptions-item>
+        <a-descriptions-item label="Labels">
+          <div v-if="deal.labels.length" class="tag-row">
+            <a-tag v-for="label in deal.labels" :key="label">{{ label }}</a-tag>
+          </div>
+          <span v-else class="muted">No labels</span>
+        </a-descriptions-item>
+      </a-descriptions>
+
+      <a-card v-if="deal.internal_notes" size="small" title="Internal notes">
+        <p class="notes">{{ deal.internal_notes }}</p>
+      </a-card>
+
+      <div class="drawer-actions">
+        <RouterLink :to="{ name: 'dealDetail', params: { campaignId: deal.campaign_id, dealId: deal.id } }">
+          <a-button type="primary" block>Open deal detail</a-button>
+        </RouterLink>
+        <RouterLink :to="{ name: 'influencerDetail', params: { influencerId: deal.influencer.id } }">
+          <a-button block>Open influencer detail</a-button>
+        </RouterLink>
       </div>
-    </section>
-
-    <section class="panel">
-      <h3>Contacts</h3>
-      <p class="muted">
-        Known contacts and manager relationships will load from the Influencer Library subresources.
-      </p>
-    </section>
-
-    <section class="panel">
-      <h3>Deliverables</h3>
-      <div class="empty-line">Deliverable rows will appear here with status, due date, post URL, and notes.</div>
-    </section>
-
-    <section class="panel">
-      <h3>Compensation</h3>
-      <div class="empty-line">
-        CompensationItem rows will track cash, gifts, samples, reimbursements, travel, meals, and other costs.
-      </div>
-    </section>
-
-    <section class="panel">
-      <h3>Email context</h3>
-      <div class="empty-line">
-        Manual thread links and contact-based candidates will appear here without changing status automatically.
-      </div>
-    </section>
-  </aside>
+    </div>
+  </a-drawer>
 </template>
 
 <style scoped>
-.drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  z-index: 10;
-  width: min(440px, 100vw);
-  height: 100vh;
-  overflow-y: auto;
-  border-left: 1px solid #d7dee8;
-  background: #fbfcfe;
-  box-shadow: -12px 0 32px rgb(22 32 51 / 12%);
-}
-
-.drawer-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+.drawer-content {
+  display: grid;
   gap: 16px;
-  padding: 24px;
-  border-bottom: 1px solid #e2e8f0;
 }
 
-.eyebrow {
-  margin: 0 0 6px;
-  color: #667066;
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-h2,
-h3 {
-  margin: 0;
-  color: #242826;
+.profile-block {
+  display: grid;
+  gap: 8px;
 }
 
 h2 {
-  font-size: 22px;
+  margin: 0;
+  color: #20262d;
+  font-size: 24px;
 }
 
-h3 {
-  font-size: 14px;
-}
-
-.icon-button {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #3d443f;
-  cursor: pointer;
-}
-
-.panel {
-  display: grid;
-  gap: 14px;
-  margin: 16px;
-  padding: 16px;
-  border: 1px solid #e1e7ef;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-.panel-row {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  align-items: start;
-  gap: 12px;
-  color: #566058;
-  font-size: 13px;
-}
-
-.panel-row strong {
-  color: #242826;
+.profile-block p,
+.notes {
+  margin: 0;
+  color: #58636f;
+  line-height: 1.5;
 }
 
 .tag-row {
@@ -160,11 +132,12 @@ h3 {
   gap: 6px;
 }
 
-.muted,
-.empty-line {
-  margin: 0;
-  color: #657068;
-  font-size: 13px;
-  line-height: 1.5;
+.muted {
+  color: #697582;
+}
+
+.drawer-actions {
+  display: grid;
+  gap: 10px;
 }
 </style>

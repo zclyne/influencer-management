@@ -140,7 +140,6 @@ const runConfirm = async () => {
     <section class="import-main">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Influencer Imports</p>
           <h1>Modash CSV wizard</h1>
         </div>
         <StatusBadge label="Real preview + confirm API" tone="active" />
@@ -273,14 +272,6 @@ const runConfirm = async () => {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
-}
-
-.eyebrow {
-  margin: 0 0 6px;
-  color: #667066;
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
 }
 
 h1,

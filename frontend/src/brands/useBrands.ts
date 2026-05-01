@@ -115,7 +115,7 @@ export const useBrands = () => {
       const archived = results.length - failed
 
       if (failed > 0) {
-        error.value = `${failed} brand(s) could not be archived.`
+        error.value = `${failed} brand(s) could not be deleted.`
       }
 
       selectedRowKeys.value = brandIds.filter((_, index) => results[index]?.status === 'rejected')

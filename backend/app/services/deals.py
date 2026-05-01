@@ -337,6 +337,7 @@ class DealService:
                 city=deal.influencer.city,
             ),
             primary_platform=_primary_platform(deal.influencer.platforms),
+            platforms=_platform_summaries(deal.influencer.platforms),
             primary_contact=_primary_contact(deal.influencer.contacts),
             deliverables=deliverables,
             compensation=compensation,
@@ -424,6 +425,24 @@ def _primary_platform(
         profile_url=platform.profile_url,
         follower_count=platform.follower_count,
     )
+
+
+def _platform_summaries(
+    platforms: list[models.InfluencerPlatform],
+) -> list[PrimaryPlatformSummary]:
+    return [
+        PrimaryPlatformSummary(
+            platform=platform.platform,
+            username=platform.username,
+            profile_url=platform.profile_url,
+            follower_count=platform.follower_count,
+        )
+        for platform in sorted(
+            platforms,
+            key=lambda item: (item.follower_count or 0, item.created_at),
+            reverse=True,
+        )
+    ]
 
 
 def _primary_contact(

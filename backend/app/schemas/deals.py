@@ -111,6 +111,7 @@ class DealPipelineRow(BaseModel):
     internal_notes: str | None = None
     influencer: InfluencerSummary
     primary_platform: PrimaryPlatformSummary | None = None
+    platforms: list[PrimaryPlatformSummary] = Field(default_factory=list)
     primary_contact: PrimaryContactSummary | None = None
     deliverables: DeliverableSummary
     compensation: CompensationSummary

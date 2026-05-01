@@ -8,7 +8,32 @@ import type {
   CampaignListResponse,
   CampaignResponse,
   CampaignStatus,
+  DealBulkCreateRequest,
+  DealBulkCreateResponse,
+  DealBulkUpdateRequest,
+  DealBulkUpdateResponse,
+  DealDetailResponse,
+  DealListResponse,
+  DealStatus,
+  DealUpdateRequest,
+  DeliverableCreateRequest,
+  DeliverableListResponse,
+  DeliverableResponse,
+  DeliverableUpdateRequest,
+  CompensationItemCreateRequest,
+  CompensationItemListResponse,
+  CompensationItemResponse,
+  CompensationItemUpdateRequest,
+  InfluencerContactCreateRequest,
+  InfluencerContactResponse,
+  InfluencerContactUpdateRequest,
+  InfluencerDealListResponse,
   InfluencerListResponse,
+  InfluencerPlatformCreateRequest,
+  InfluencerPlatformResponse,
+  InfluencerPlatformUpdateRequest,
+  InfluencerResponse,
+  InfluencerUpdateRequest,
   IngestionConfirmRequest,
   IngestionConfirmResponse,
   IngestionPreviewResponse,
@@ -107,10 +132,136 @@ export const createCampaign = (payload: CampaignCreateRequest) =>
     body: JSON.stringify(payload),
   })
 
+export const getCampaign = (campaignId: string) =>
+  apiRequest<CampaignResponse>(`/campaigns/${campaignId}`)
+
 export const archiveCampaign = (campaignId: string) =>
   apiRequest<void>(`/campaigns/${campaignId}`, {
     method: 'DELETE',
   })
+
+export const listCampaignDeals = (
+  campaignId: string,
+  options: {
+    status?: DealStatus
+    platform?: string
+    lostReason?: string
+    hasEmailThread?: boolean
+    includeArchived?: boolean
+    sort?: string
+  } = {},
+) =>
+  apiRequest<DealListResponse>(
+    `/campaigns/${campaignId}/deals${toQueryString({
+      status: options.status,
+      platform: options.platform,
+      lost_reason: options.lostReason,
+      has_email_thread: options.hasEmailThread,
+      include_archived: options.includeArchived,
+      sort: options.sort,
+    })}`,
+  )
+
+export const bulkCreateCampaignDeals = (campaignId: string, payload: DealBulkCreateRequest) =>
+  apiRequest<DealBulkCreateResponse>(`/campaigns/${campaignId}/deals/bulk`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const bulkUpdateCampaignDeals = (campaignId: string, payload: DealBulkUpdateRequest) =>
+  apiRequest<DealBulkUpdateResponse>(`/campaigns/${campaignId}/deals/bulk`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+
+export const getDeal = (dealId: string) => apiRequest<DealDetailResponse>(`/deals/${dealId}`)
+
+export const updateDeal = (dealId: string, payload: DealUpdateRequest) =>
+  apiRequest<DealDetailResponse>(`/deals/${dealId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+
+export const archiveDeal = (dealId: string) =>
+  apiRequest<void>(`/deals/${dealId}`, {
+    method: 'DELETE',
+  })
+
+export const listDealDeliverables = (dealId: string) =>
+  apiRequest<DeliverableListResponse>(`/deals/${dealId}/deliverables`)
+
+export const createDealDeliverable = (dealId: string, payload: DeliverableCreateRequest) =>
+  apiRequest<DeliverableResponse>(`/deals/${dealId}/deliverables`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const updateDealDeliverable = (
+  dealId: string,
+  deliverableId: string,
+  payload: DeliverableUpdateRequest,
+) =>
+  apiRequest<DeliverableResponse>(`/deals/${dealId}/deliverables/${deliverableId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+
+export const deleteDealDeliverable = (dealId: string, deliverableId: string) =>
+  apiRequest<void>(`/deals/${dealId}/deliverables/${deliverableId}`, {
+    method: 'DELETE',
+  })
+
+export const listDealCompensationItems = (dealId: string) =>
+  apiRequest<CompensationItemListResponse>(`/deals/${dealId}/compensation-items`)
+
+export const createDealCompensationItem = (
+  dealId: string,
+  payload: CompensationItemCreateRequest,
+) =>
+  apiRequest<CompensationItemResponse>(`/deals/${dealId}/compensation-items`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const updateDealCompensationItem = (
+  dealId: string,
+  itemId: string,
+  payload: CompensationItemUpdateRequest,
+) =>
+  apiRequest<CompensationItemResponse>(`/deals/${dealId}/compensation-items/${itemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+
+export const deleteDealCompensationItem = (dealId: string, itemId: string) =>
+  apiRequest<void>(`/deals/${dealId}/compensation-items/${itemId}`, {
+    method: 'DELETE',
+  })
+
+export const exportCampaignCsv = async (
+  campaignId: string,
+  options: {
+    status?: DealStatus
+    platform?: string
+    lostReason?: string
+    includeArchived?: boolean
+  } = {},
+) => {
+  const response = await fetch(
+    `${apiRoot}/campaigns/${campaignId}/export.csv${toQueryString({
+      status: options.status,
+      platform: options.platform,
+      lost_reason: options.lostReason,
+      include_archived: options.includeArchived,
+    })}`,
+  )
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await parseError(response))
+  }
+
+  return response.blob()
+}
 
 export const listBrands = (options: { query?: string; includeArchived?: boolean } = {}) =>
   apiRequest<BrandListResponse>(
@@ -160,6 +311,66 @@ export const archiveInfluencer = (influencerId: string) =>
   apiRequest<void>(`/influencers/${influencerId}`, {
     method: 'DELETE',
   })
+
+export const getInfluencer = (influencerId: string) =>
+  apiRequest<InfluencerResponse>(`/influencers/${influencerId}`)
+
+export const updateInfluencer = (influencerId: string, payload: InfluencerUpdateRequest) =>
+  apiRequest<InfluencerResponse>(`/influencers/${influencerId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+
+export const createInfluencerPlatform = (
+  influencerId: string,
+  payload: InfluencerPlatformCreateRequest,
+) =>
+  apiRequest<InfluencerPlatformResponse>(`/influencers/${influencerId}/platforms`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const updateInfluencerPlatform = (
+  influencerId: string,
+  platformId: string,
+  payload: InfluencerPlatformUpdateRequest,
+) =>
+  apiRequest<InfluencerPlatformResponse>(`/influencers/${influencerId}/platforms/${platformId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+
+export const deleteInfluencerPlatform = (influencerId: string, platformId: string) =>
+  apiRequest<void>(`/influencers/${influencerId}/platforms/${platformId}`, {
+    method: 'DELETE',
+  })
+
+export const createInfluencerContact = (
+  influencerId: string,
+  payload: InfluencerContactCreateRequest,
+) =>
+  apiRequest<InfluencerContactResponse>(`/influencers/${influencerId}/contacts`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const updateInfluencerContact = (
+  influencerId: string,
+  contactId: string,
+  payload: InfluencerContactUpdateRequest,
+) =>
+  apiRequest<InfluencerContactResponse>(`/influencers/${influencerId}/contacts/${contactId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+
+export const deleteInfluencerContact = (influencerId: string, contactId: string) =>
+  apiRequest<void>(`/influencers/${influencerId}/contacts/${contactId}`, {
+    method: 'DELETE',
+  })
+
+export const listInfluencerDeals = (influencerId: string) =>
+  apiRequest<InfluencerDealListResponse>(`/influencers/${influencerId}/deals`)
 
 export const createManualInfluencer = (payload: ManualInfluencerInput, mergeIfMatched = false) =>
   apiRequest<ManualInfluencerResponse>(

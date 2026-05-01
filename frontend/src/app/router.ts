@@ -2,7 +2,9 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import BrandList from '../brands/BrandList.vue'
 import CampaignList from '../campaigns/CampaignList.vue'
 import CampaignWorkspace from '../campaigns/CampaignWorkspace.vue'
+import DealDetailPage from '../deals/DealDetailPage.vue'
 import ImportWizard from '../ingestion/ImportWizard.vue'
+import InfluencerDetailPage from '../influencers/InfluencerDetailPage.vue'
 import InfluencerLibrary from '../influencers/InfluencerLibrary.vue'
 import PlaceholderPage from './PlaceholderPage.vue'
 
@@ -24,11 +26,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/campaigns/:campaignId/deals/:dealId',
     name: 'dealDetail',
-    component: PlaceholderPage,
-    props: {
-      title: 'Deal detail',
-      description: 'Deal detail will use the shared influencer profile and campaign deal context.',
-    },
+    component: DealDetailPage,
   },
   {
     path: '/influencers',
@@ -49,11 +47,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/influencers/:influencerId',
     name: 'influencerDetail',
-    component: PlaceholderPage,
-    props: {
-      title: 'Influencer detail',
-      description: 'Global profile, platforms, contacts, and audience snapshots will load here.',
-    },
+    component: InfluencerDetailPage,
   },
   {
     path: '/brands',
