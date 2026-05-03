@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import {
+  archiveCampaign as archiveCampaignRequest,
   archiveDeal as archiveDealRequest,
   bulkCreateCampaignDeals,
   bulkUpdateCampaignDeals,
@@ -7,9 +8,11 @@ import {
   exportCampaignCsv,
   getCampaign,
   listCampaignDeals,
+  updateCampaign,
 } from '../api/client'
 import type {
   CampaignResponse,
+  CampaignUpdateRequest,
   DealBulkUpdateRequest,
   DealPipelineRow,
   DealStatus,
@@ -60,7 +63,6 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
   const searchText = ref('')
   const statusFilter = ref<DealStatus | undefined>()
   const platformFilter = ref<string | undefined>()
-  const hasEmailThreadFilter = ref<boolean | undefined>()
   const includeArchived = ref(false)
   const selectedRowKeys = ref<string[]>([])
   const selectedDeal = ref<DealPipelineRow | null>(null)
@@ -78,7 +80,6 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
         listCampaignDeals(id, {
           status: statusFilter.value,
           platform: platformFilter.value,
-          hasEmailThread: hasEmailThreadFilter.value,
           includeArchived: includeArchived.value,
           sort: '-updated_at',
         }),
@@ -154,6 +155,35 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
 
   const selectDeal = (deal: DealPipelineRow | null) => {
     selectedDeal.value = deal
+  }
+
+  const updateCampaignProfile = async (payload: CampaignUpdateRequest) => {
+    mutating.value = true
+    error.value = null
+
+    try {
+      campaign.value = await updateCampaign(campaignId(), payload)
+      return campaign.value
+    } catch (mutationError) {
+      error.value = errorMessage(mutationError)
+      throw mutationError
+    } finally {
+      mutating.value = false
+    }
+  }
+
+  const archiveCampaignProfile = async () => {
+    mutating.value = true
+    error.value = null
+
+    try {
+      await archiveCampaignRequest(campaignId())
+    } catch (mutationError) {
+      error.value = errorMessage(mutationError)
+      throw mutationError
+    } finally {
+      mutating.value = false
+    }
   }
 
   const addInfluencersToCampaign = async (influencerIds: string[]) => {
@@ -265,7 +295,7 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
     }
   }
 
-  watch([statusFilter, platformFilter, hasEmailThreadFilter, includeArchived], () => {
+  watch([statusFilter, platformFilter, includeArchived], () => {
     selectedRowKeys.value = []
     void loadWorkspace()
   })
@@ -289,7 +319,6 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
     searchText,
     statusFilter,
     platformFilter,
-    hasEmailThreadFilter,
     includeArchived,
     selectedRowKeys,
     selectedDeal,
@@ -300,6 +329,8 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
     platformOptions,
     loadWorkspace,
     selectDeal,
+    updateCampaignProfile,
+    archiveCampaignProfile,
     addInfluencersToCampaign,
     bulkUpdateSelectedDeals,
     archiveDeal,

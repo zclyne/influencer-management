@@ -128,6 +128,7 @@ const deliverableColumns: TableColumnsType<DeliverableResponse> = [
   {
     title: 'Actions',
     key: 'actions',
+    fixed: 'right',
     width: 150,
   },
 ]
@@ -157,6 +158,7 @@ const compensationColumns: TableColumnsType<CompensationItemResponse> = [
   {
     title: 'Actions',
     key: 'actions',
+    fixed: 'right',
     width: 150,
   },
 ]
@@ -460,6 +462,7 @@ void loadDealDetail()
             <h1>{{ deal.influencer.display_name }} deal</h1>
             <div class="heading-meta">
               <a-tag :color="statusColor(deal.status)">{{ statusLabel(deal.status) }}</a-tag>
+              <a-tag v-if="deal.archived_at" color="red">Deleted</a-tag>
               <span>{{ campaignName }} · next action: {{ nextActionLabel }}</span>
             </div>
           </div>
@@ -467,9 +470,10 @@ void loadDealDetail()
             <RouterLink :to="{ name: 'campaignWorkspace', params: { campaignId } }">
               <a-button>Open campaign</a-button>
             </RouterLink>
-            <a-tooltip title="Template picker is not implemented yet.">
-              <a-button type="primary" disabled>Generate draft</a-button>
-            </a-tooltip>
+            <RouterLink :to="{ name: 'influencerDetail', params: { influencerId: deal.influencer.id } }">
+              <a-button>Open influencer</a-button>
+            </RouterLink>
+            <a-button type="primary" @click="openDealEdit">Edit deal</a-button>
           </div>
         </div>
 
@@ -510,6 +514,9 @@ void loadDealDetail()
               <a-descriptions-item label="Campaign">
                 {{ campaignName }}
               </a-descriptions-item>
+              <a-descriptions-item label="Lost reason">
+                {{ deal.lost_reason || 'Not set' }}
+              </a-descriptions-item>
               <a-descriptions-item label="Labels">
                 <div v-if="deal.labels.length" class="tag-row">
                   <a-tag v-for="label in deal.labels" :key="label">{{ label }}</a-tag>
@@ -518,6 +525,12 @@ void loadDealDetail()
               </a-descriptions-item>
               <a-descriptions-item label="Next action">
                 {{ nextActionLabel }}
+              </a-descriptions-item>
+              <a-descriptions-item label="Created">
+                {{ formatDate(deal.created_at) }}
+              </a-descriptions-item>
+              <a-descriptions-item label="Updated">
+                {{ formatDate(deal.updated_at) }}
               </a-descriptions-item>
             </a-descriptions>
             <template #actions>
@@ -534,12 +547,9 @@ void loadDealDetail()
               <a-descriptions-item label="Role">
                 {{ deal.primary_contact?.role ?? 'Not set' }}
               </a-descriptions-item>
-              <a-descriptions-item label="Email context">
-                {{ deal.email_threads.thread_count }} linked threads
-              </a-descriptions-item>
             </a-descriptions>
             <template #actions>
-              <RouterLink :to="{ name: 'email', query: { campaignId } }">
+              <RouterLink :to="{ name: 'email', query: { campaignId, dealId } }">
                 <a-button type="link">Open email</a-button>
               </RouterLink>
             </template>
@@ -557,7 +567,7 @@ void loadDealDetail()
               :data-source="deliverables"
               :pagination="false"
               :row-key="(record: DeliverableResponse) => record.id"
-              :scroll="{ x: 720 }"
+              :scroll="{ x: 820 }"
               size="small"
             >
               <template #bodyCell="{ column, record }">
@@ -604,7 +614,7 @@ void loadDealDetail()
               :data-source="compensationItems"
               :pagination="false"
               :row-key="(record: CompensationItemResponse) => record.id"
-              :scroll="{ x: 760 }"
+              :scroll="{ x: 820 }"
               size="small"
             >
               <template #bodyCell="{ column, record }">
@@ -655,16 +665,12 @@ void loadDealDetail()
           </a-card>
 
           <a-card class="section-card">
-            <template #title>Email context placeholder</template>
+            <template #title>Email</template>
             <p class="section-copy">
-              Show lightweight linked-thread count and manual link status only. Do not build email timelines here.
+              Review Gmail threads linked through Desktop IRM labels for this deal.
             </p>
-            <p class="section-copy">
-              {{ deal.email_threads.thread_count }} linked threads. Full campaign-filtered email workflow
-              opens from Email when that module is designed.
-            </p>
-            <RouterLink :to="{ name: 'email', query: { campaignId } }">
-              <a-button>Open email</a-button>
+            <RouterLink :to="{ name: 'email', query: { campaignId, dealId } }">
+              <a-button>Open deal email</a-button>
             </RouterLink>
           </a-card>
         </div>

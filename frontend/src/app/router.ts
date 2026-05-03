@@ -3,6 +3,7 @@ import BrandList from '../brands/BrandList.vue'
 import CampaignList from '../campaigns/CampaignList.vue'
 import CampaignWorkspace from '../campaigns/CampaignWorkspace.vue'
 import DealDetailPage from '../deals/DealDetailPage.vue'
+import EmailPage from '../email/EmailPage.vue'
 import ImportWizard from '../ingestion/ImportWizard.vue'
 import InfluencerDetailPage from '../influencers/InfluencerDetailPage.vue'
 import InfluencerLibrary from '../influencers/InfluencerLibrary.vue'
@@ -66,11 +67,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/email',
     name: 'email',
-    component: PlaceholderPage,
-    props: {
-      title: 'Email',
-      description: 'Email is reserved while the standalone workflow is redesigned.',
-    },
+    component: EmailPage,
   },
 ]
 

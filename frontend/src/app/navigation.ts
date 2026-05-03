@@ -29,7 +29,7 @@ export const navigationItems: NavigationItem[] = [
   {
     key: 'email',
     label: 'Email',
-    detail: 'Placeholder',
+    detail: 'Gmail',
     path: '/email',
   },
   {

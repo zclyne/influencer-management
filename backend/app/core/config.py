@@ -11,7 +11,26 @@ class Settings(BaseSettings):
     database_url: str = Field(default="sqlite:///../.data/desktop_irm.db", alias="DATABASE_URL")
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     local_storage_dir: Path = Field(default=Path("../.data/storage"), alias="LOCAL_STORAGE_DIR")
+    local_secret_dir: Path = Field(default=Path("../.data/secrets"), alias="LOCAL_SECRET_DIR")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    gmail_client_id: str | None = Field(default=None, alias="GMAIL_CLIENT_ID")
+    gmail_client_secret: str | None = Field(default=None, alias="GMAIL_CLIENT_SECRET")
+    gmail_redirect_uri: str = Field(
+        default="http://localhost:8000/api/v1/email/auth/callback",
+        alias="GMAIL_REDIRECT_URI",
+    )
+    gmail_frontend_redirect_uri: str = Field(
+        default="http://localhost:5173/email",
+        alias="GMAIL_FRONTEND_REDIRECT_URI",
+    )
+    gmail_credential_file: Path = Field(
+        default=Path("../.data/secrets/gmail_oauth.json.enc"),
+        alias="GMAIL_CREDENTIAL_FILE",
+    )
+    gmail_credential_key_file: Path = Field(
+        default=Path("../.data/secrets/gmail_oauth.key"),
+        alias="GMAIL_CREDENTIAL_KEY_FILE",
+    )
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default=["http://localhost:5173"], alias="CORS_ORIGINS"
     )

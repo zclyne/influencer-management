@@ -83,11 +83,6 @@ class CompensationSummary(BaseModel):
     label: str | None = None
 
 
-class EmailThreadSummary(BaseModel):
-    thread_count: int = 0
-    last_activity_at: datetime | None = None
-
-
 class DealResponse(BaseModel):
     id: str
     campaign_id: str
@@ -115,7 +110,6 @@ class DealPipelineRow(BaseModel):
     primary_contact: PrimaryContactSummary | None = None
     deliverables: DeliverableSummary
     compensation: CompensationSummary
-    email_threads: EmailThreadSummary
     completion_suggested: bool = False
     updated_at: datetime
     archived_at: datetime | None = None

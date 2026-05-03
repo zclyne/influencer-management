@@ -59,16 +59,20 @@ Current completed plan files:
 - `plan/completed/background-jobs-observability.md`
 - `plan/completed/backend-module-structure-cleanup.md`
 - `plan/completed/brand-management.md`
+- `plan/completed/campaign-workspace-detail-actions.md`
 - `plan/completed/compensation-cost-items.md`
 - `plan/completed/deal-pipeline-management.md`
 - `plan/completed/deliverables.md`
+- `plan/completed/detail-pages-consistency-review.md`
 - `plan/completed/email-context-linking.md`
 - `plan/completed/export-reporting.md`
 - `plan/completed/frontend-workbench.md`
+- `plan/completed/gmail-label-email-module.md`
 - `plan/completed/influencer-notes-tags.md`
 - `plan/completed/influencer-library-crud.md`
 - `plan/completed/local-file-management.md`
 - `plan/completed/outreach-template-drafting.md`
+- `plan/completed/table-action-column-fixed.md`
 
 ## Current Implementation State
 
@@ -87,14 +91,14 @@ Implemented or mostly implemented:
 - Deal pipeline APIs, bulk deal operations, and campaign pipeline query.
 - Deliverable APIs.
 - CompensationItem APIs and summaries.
-- Email Context and Linking service.
+- Gmail-backed Email read/link service using Gmail labels.
 - Generic Template CRUD and outreach draft rendering.
 - Campaign-scoped export/reporting.
 - Background job API and persisted job records.
 - Local file management service.
 - Unified API error model and OpenAPI export helper.
 - Initial Vue/Electron frontend workbench.
-- Backend tests for health, data model, influencer ingestion, campaigns, brands, influencers, deals, deliverables, compensation, jobs/files, campaign exports, email context, templates, and outreach.
+- Backend tests for health, data model, influencer ingestion, campaigns, brands, influencers, deals, deliverables, compensation, jobs/files, campaign exports, Gmail-backed email, templates, and outreach.
 
 Not yet complete:
 
@@ -232,13 +236,19 @@ Use CompensationItem for all cash, gifts, samples, reimbursements, travel, meals
 
 Do not add compensation fields directly to Deal.
 
-### Email Context
+### Email
 
-Email linking must handle multiple contacts, multiple threads, and managers representing multiple influencers.
+Email is a Gmail-backed read/link workflow, not a local email data domain.
 
-Manual links have highest priority. Known contact matching should produce candidates unless the match is already unambiguous and confirmed by rules.
+Do not add local email account, thread metadata, message, or thread-link business tables for MVP.
+The only local Email persistence is the single-account Gmail OAuth credential secret.
 
-Do not silently mutate Deal status from email activity in MVP. Return hints and let the user confirm.
+Campaign and Deal email mapping is stored in Gmail labels managed under a reserved Desktop IRM
+namespace. Linking a thread to a Deal applies both the Deal label and its parent Campaign label.
+
+Do not silently mutate Deal status from email activity in MVP.
+Do not send, reply, archive, mark read, or mutate non-IRM Gmail labels unless the Email plan
+explicitly expands the module.
 
 ### Contract Drafts
 

@@ -8,6 +8,7 @@ import type {
   CampaignListResponse,
   CampaignResponse,
   CampaignStatus,
+  CampaignUpdateRequest,
   DealBulkCreateRequest,
   DealBulkCreateResponse,
   DealBulkUpdateRequest,
@@ -20,6 +21,13 @@ import type {
   DeliverableListResponse,
   DeliverableResponse,
   DeliverableUpdateRequest,
+  EmailThreadLinkRequest,
+  EmailThreadLinkResponse,
+  GmailAuthStartResponse,
+  GmailAuthStatusResponse,
+  GmailLabelListResponse,
+  GmailThreadDetailResponse,
+  GmailThreadListResponse,
   CompensationItemCreateRequest,
   CompensationItemListResponse,
   CompensationItemResponse,
@@ -135,6 +143,12 @@ export const createCampaign = (payload: CampaignCreateRequest) =>
 export const getCampaign = (campaignId: string) =>
   apiRequest<CampaignResponse>(`/campaigns/${campaignId}`)
 
+export const updateCampaign = (campaignId: string, payload: CampaignUpdateRequest) =>
+  apiRequest<CampaignResponse>(`/campaigns/${campaignId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+
 export const archiveCampaign = (campaignId: string) =>
   apiRequest<void>(`/campaigns/${campaignId}`, {
     method: 'DELETE',
@@ -146,7 +160,6 @@ export const listCampaignDeals = (
     status?: DealStatus
     platform?: string
     lostReason?: string
-    hasEmailThread?: boolean
     includeArchived?: boolean
     sort?: string
   } = {},
@@ -156,7 +169,6 @@ export const listCampaignDeals = (
       status: options.status,
       platform: options.platform,
       lost_reason: options.lostReason,
-      has_email_thread: options.hasEmailThread,
       include_archived: options.includeArchived,
       sort: options.sort,
     })}`,
@@ -237,6 +249,68 @@ export const deleteDealCompensationItem = (dealId: string, itemId: string) =>
   apiRequest<void>(`/deals/${dealId}/compensation-items/${itemId}`, {
     method: 'DELETE',
   })
+
+export const getEmailAuthStatus = () =>
+  apiRequest<GmailAuthStatusResponse>('/email/auth/status')
+
+export const startEmailAuth = () =>
+  apiRequest<GmailAuthStartResponse>('/email/auth/start', {
+    method: 'POST',
+  })
+
+export const disconnectEmail = () =>
+  apiRequest<void>('/email/auth/disconnect', {
+    method: 'POST',
+  })
+
+export const listEmailLabels = () => apiRequest<GmailLabelListResponse>('/email/labels')
+
+export const listEmailThreads = (
+  options: {
+    campaignId?: string
+    dealId?: string
+    query?: string
+    label?: string
+    pageToken?: string
+    pageSize?: number
+  } = {},
+) =>
+  apiRequest<GmailThreadListResponse>(
+    `/email/threads${toQueryString({
+      campaign_id: options.campaignId,
+      deal_id: options.dealId,
+      q: options.query,
+      label: options.label,
+      page_token: options.pageToken,
+      page_size: options.pageSize === undefined ? undefined : String(options.pageSize),
+    })}`,
+  )
+
+export const getEmailThread = (threadId: string) =>
+  apiRequest<GmailThreadDetailResponse>(`/email/threads/${threadId}`)
+
+export const linkEmailThread = (threadId: string, payload: EmailThreadLinkRequest) =>
+  apiRequest<EmailThreadLinkResponse>(`/email/threads/${threadId}/links`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const unlinkEmailThread = (
+  threadId: string,
+  options: {
+    campaignId?: string
+    dealId?: string
+  },
+) =>
+  apiRequest<EmailThreadLinkResponse>(
+    `/email/threads/${threadId}/links${toQueryString({
+      campaign_id: options.campaignId,
+      deal_id: options.dealId,
+    })}`,
+    {
+      method: 'DELETE',
+    },
+  )
 
 export const exportCampaignCsv = async (
   campaignId: string,

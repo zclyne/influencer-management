@@ -88,7 +88,6 @@ Recommended MVP columns:
 - compensation_summary.
 - cash_total.
 - reimbursement_total.
-- email_thread_count.
 - internal_notes.
 - updated_at.
 

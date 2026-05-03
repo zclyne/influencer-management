@@ -14,7 +14,6 @@ from app.enums import (
     ContactRole,
     DealStatus,
     DeliverableStatus,
-    EmailLinkType,
     TemplateType,
 )
 
@@ -209,7 +208,6 @@ class Deal(TimestampMixin, ArchiveMixin, Base):
     compensation_items: Mapped[list["CompensationItem"]] = relationship(
         back_populates="deal", cascade="all, delete-orphan"
     )
-    email_thread_links: Mapped[list["EmailThreadLink"]] = relationship(back_populates="deal")
 
 
 class Deliverable(TimestampMixin, Base):
@@ -249,76 +247,6 @@ class CompensationItem(TimestampMixin, Base):
 
     deal: Mapped[Deal] = relationship(back_populates="compensation_items")
     receipt_file: Mapped["StoredFile | None"] = relationship()
-
-
-class EmailThreadLink(TimestampMixin, Base):
-    __tablename__ = "email_thread_links"
-    __table_args__ = (
-        Index("ix_email_thread_external_thread", "provider", "external_thread_id"),
-        Index("ix_email_thread_deal_id", "deal_id"),
-        Index("ix_email_thread_contact_id", "contact_id"),
-    )
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
-    provider: Mapped[str] = mapped_column(String(64), nullable=False)
-    external_thread_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    external_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    influencer_id: Mapped[str | None] = mapped_column(ForeignKey("influencers.id"), nullable=True)
-    campaign_id: Mapped[str | None] = mapped_column(ForeignKey("campaigns.id"), nullable=True)
-    deal_id: Mapped[str | None] = mapped_column(ForeignKey("deals.id"), nullable=True)
-    contact_id: Mapped[str | None] = mapped_column(
-        ForeignKey("influencer_contacts.id"), nullable=True
-    )
-    link_type: Mapped[str] = mapped_column(String(64), default=EmailLinkType.MANUAL.value)
-    confidence: Mapped[Decimal | None] = mapped_column(Numeric(4, 3), nullable=True)
-    linked_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
-
-    deal: Mapped[Deal | None] = relationship(back_populates="email_thread_links")
-
-
-class EmailAccount(TimestampMixin, Base):
-    __tablename__ = "email_accounts"
-    __table_args__ = (
-        UniqueConstraint("provider", "email", name="uq_email_account_provider_email"),
-    )
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
-    provider: Mapped[str] = mapped_column(String(64), nullable=False)
-    email: Mapped[str] = mapped_column(String(320), nullable=False)
-    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    sync_status: Mapped[str] = mapped_column(String(64), default="idle")
-    last_synced_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-
-    threads: Mapped[list["EmailThreadMetadata"]] = relationship(back_populates="account")
-
-
-class EmailThreadMetadata(TimestampMixin, Base):
-    __tablename__ = "email_thread_metadata"
-    __table_args__ = (
-        UniqueConstraint(
-            "provider",
-            "external_thread_id",
-            name="uq_email_thread_metadata_provider_external_thread",
-        ),
-        Index("ix_email_thread_metadata_account_id", "account_id"),
-        Index("ix_email_thread_metadata_last_message_at", "last_message_at"),
-    )
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
-    provider: Mapped[str] = mapped_column(String(64), nullable=False)
-    external_thread_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    account_id: Mapped[str | None] = mapped_column(ForeignKey("email_accounts.id"), nullable=True)
-    subject: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    participants_json: Mapped[list[dict[str, Any]] | None] = mapped_column(SAJSON, nullable=True)
-    last_message_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
-    message_count: Mapped[int] = mapped_column(default=0)
-
-    account: Mapped[EmailAccount | None] = relationship(back_populates="threads")
 
 
 class ImportSession(TimestampMixin, Base):

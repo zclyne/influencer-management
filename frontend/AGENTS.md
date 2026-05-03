@@ -170,12 +170,14 @@ Import Wizard:
 
 Email:
 
-- Keep the standalone Email page as a placeholder.
-- By default, Email should represent all email context. When a `campaignId` query parameter is
-  present, the future Email page should filter to email related to that campaign.
-- Deal and Influencer detail pages may reserve space for future email context.
-- Do not build thread timelines, candidate queues, or standalone email workflows until the
-  email UX is redesigned.
+- Email is a Gmail-backed read/link page.
+- No query params should show normal Gmail threads.
+- `campaignId` filters to the campaign Gmail label.
+- `campaignId` plus `dealId` filters to the deal Gmail label.
+- Thread detail fetches live from Gmail; do not store message bodies in frontend state beyond the
+  active page session.
+- Link/unlink actions should call backend Email APIs that apply or remove Desktop IRM Gmail labels.
+- Do not build send/reply/archive/mark-read behavior until the Email module explicitly expands.
 
 Templates:
 

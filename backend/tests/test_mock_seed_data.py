@@ -110,7 +110,6 @@ def test_seeded_deal_graph_and_export_api_smoke(
     active_deal = next(deal for deal in deals if deal["id"] == ACTIVE_DEAL_ID)
     assert active_deal["deliverables"]["total_count"] == 2
     assert active_deal["compensation"]["cash_totals"]["USD"] == "8500.00"
-    assert active_deal["email_threads"]["thread_count"] == 1
 
     deliverables_response = api_client.get(f"/api/v1/deals/{ACTIVE_DEAL_ID}/deliverables")
     assert deliverables_response.status_code == 200

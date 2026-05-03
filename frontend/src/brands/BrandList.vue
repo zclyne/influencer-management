@@ -68,6 +68,7 @@ const columns: TableColumnsType<BrandResponse> = [
   {
     title: 'Actions',
     key: 'actions',
+    fixed: 'right',
     width: 160,
   },
 ]
@@ -239,6 +240,7 @@ void loadBrands()
         :pagination="{ pageSize: 10, showSizeChanger: true }"
         :row-key="(record: BrandResponse) => record.id"
         :row-selection="rowSelection"
+        :scroll="{ x: 960 }"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'brand'">

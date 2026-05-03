@@ -75,9 +75,6 @@ const locationLabel = () => {
         <a-descriptions-item label="Compensation">
           {{ deal.compensation.label ?? 'No compensation items' }}
         </a-descriptions-item>
-        <a-descriptions-item label="Email threads">
-          {{ deal.email_threads.thread_count }}
-        </a-descriptions-item>
         <a-descriptions-item label="Labels">
           <div v-if="deal.labels.length" class="tag-row">
             <a-tag v-for="label in deal.labels" :key="label">{{ label }}</a-tag>

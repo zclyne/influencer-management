@@ -24,7 +24,6 @@ EXPORT_COLUMNS = [
     "compensation_summary",
     "cash_total",
     "reimbursement_total",
-    "email_thread_count",
     "internal_notes",
     "updated_at",
 ]
@@ -110,7 +109,6 @@ class CampaignExportService:
             "compensation_summary": self._compensation_summary(deal.compensation_items),
             "cash_total": f"{cash_total:.2f}",
             "reimbursement_total": f"{reimbursement_total:.2f}",
-            "email_thread_count": len(deal.email_thread_links),
             "internal_notes": deal.internal_notes or "",
             "updated_at": deal.updated_at.isoformat(),
         }

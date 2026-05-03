@@ -137,6 +137,7 @@ const columns: TableColumnsType<InfluencerListItem> = [
   {
     title: 'Actions',
     key: 'actions',
+    fixed: 'right',
     width: 110,
   },
 ]

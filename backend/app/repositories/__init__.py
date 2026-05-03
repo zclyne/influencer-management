@@ -5,7 +5,6 @@ from app.repositories.sqlalchemy import (
     CompensationItemRepository,
     DealRepository,
     DeliverableRepository,
-    EmailThreadLinkRepository,
     ImportSessionRepository,
     InfluencerAudienceSnapshotRepository,
     InfluencerContactRepository,
@@ -21,7 +20,6 @@ __all__ = [
     "CompensationItemRepository",
     "DealRepository",
     "DeliverableRepository",
-    "EmailThreadLinkRepository",
     "ImportSessionRepository",
     "InfluencerAudienceSnapshotRepository",
     "InfluencerContactRepository",
@@ -29,4 +27,3 @@ __all__ = [
     "InfluencerRepository",
     "StoredFileRepository",
 ]
-

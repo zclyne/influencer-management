@@ -360,7 +360,6 @@ class DealRepository(SqlAlchemyRepository[models.Deal]):
         status: str | None = None,
         platform: str | None = None,
         lost_reason: str | None = None,
-        has_email_thread: bool | None = None,
         include_archived: bool = False,
     ) -> list[models.Deal]:
         stmt = (
@@ -372,7 +371,6 @@ class DealRepository(SqlAlchemyRepository[models.Deal]):
                 selectinload(models.Deal.influencer).selectinload(models.Influencer.contacts),
                 selectinload(models.Deal.deliverables),
                 selectinload(models.Deal.compensation_items),
-                selectinload(models.Deal.email_thread_links),
             )
             .where(models.Deal.campaign_id == campaign_id)
         )
@@ -388,10 +386,6 @@ class DealRepository(SqlAlchemyRepository[models.Deal]):
             )
         if lost_reason:
             stmt = stmt.where(models.Deal.lost_reason == lost_reason)
-        if has_email_thread is True:
-            stmt = stmt.where(models.Deal.email_thread_links.any())
-        elif has_email_thread is False:
-            stmt = stmt.where(~models.Deal.email_thread_links.any())
         if not include_archived:
             stmt = stmt.where(models.Deal.archived_at.is_(None))
         stmt = stmt.order_by(models.Deal.updated_at.desc())
@@ -419,7 +413,6 @@ class DealRepository(SqlAlchemyRepository[models.Deal]):
                 selectinload(models.Deal.influencer).selectinload(models.Influencer.contacts),
                 selectinload(models.Deal.deliverables),
                 selectinload(models.Deal.compensation_items),
-                selectinload(models.Deal.email_thread_links),
             )
             .where(models.Deal.campaign_id == campaign_id)
         )
@@ -455,7 +448,6 @@ class DealRepository(SqlAlchemyRepository[models.Deal]):
                 selectinload(models.Deal.influencer).selectinload(models.Influencer.contacts),
                 selectinload(models.Deal.deliverables),
                 selectinload(models.Deal.compensation_items),
-                selectinload(models.Deal.email_thread_links),
             )
             .where(models.Deal.id == deal_id)
         )
@@ -475,7 +467,6 @@ class DealRepository(SqlAlchemyRepository[models.Deal]):
                     ),
                     selectinload(models.Deal.deliverables),
                     selectinload(models.Deal.compensation_items),
-                    selectinload(models.Deal.email_thread_links),
                 )
                 .where(models.Deal.id.in_(ids))
             )
@@ -535,73 +526,6 @@ class CompensationItemRepository(SqlAlchemyRepository[models.CompensationItem]):
     def delete(self, item: models.CompensationItem) -> None:
         self.db.delete(item)
         self.db.flush()
-
-
-class EmailThreadLinkRepository(SqlAlchemyRepository[models.EmailThreadLink]):
-    model = models.EmailThreadLink
-
-    def list(
-        self,
-        *,
-        provider: str | None = None,
-        external_thread_id: str | None = None,
-        deal_id: str | None = None,
-        influencer_id: str | None = None,
-    ) -> list[models.EmailThreadLink]:
-        stmt = select(models.EmailThreadLink).order_by(models.EmailThreadLink.updated_at.desc())
-        if provider:
-            stmt = stmt.where(models.EmailThreadLink.provider == provider)
-        if external_thread_id:
-            stmt = stmt.where(models.EmailThreadLink.external_thread_id == external_thread_id)
-        if deal_id:
-            stmt = stmt.where(models.EmailThreadLink.deal_id == deal_id)
-        if influencer_id:
-            stmt = stmt.where(models.EmailThreadLink.influencer_id == influencer_id)
-        return list(self.db.scalars(stmt))
-
-    def list_manual_for_thread(
-        self, provider: str, external_thread_id: str
-    ) -> list[models.EmailThreadLink]:
-        return list(
-            self.db.scalars(
-                select(models.EmailThreadLink).where(
-                    models.EmailThreadLink.provider == provider,
-                    models.EmailThreadLink.external_thread_id == external_thread_id,
-                    models.EmailThreadLink.link_type == "manual",
-                )
-            )
-        )
-
-    def delete(self, link: models.EmailThreadLink) -> None:
-        self.db.delete(link)
-        self.db.flush()
-
-
-class EmailAccountRepository(SqlAlchemyRepository[models.EmailAccount]):
-    model = models.EmailAccount
-
-
-class EmailThreadMetadataRepository(SqlAlchemyRepository[models.EmailThreadMetadata]):
-    model = models.EmailThreadMetadata
-
-    def get_by_thread(
-        self, provider: str, external_thread_id: str
-    ) -> models.EmailThreadMetadata | None:
-        return self.db.scalar(
-            select(models.EmailThreadMetadata).where(
-                models.EmailThreadMetadata.provider == provider,
-                models.EmailThreadMetadata.external_thread_id == external_thread_id,
-            )
-        )
-
-    def list(self, *, provider: str | None = None) -> list[models.EmailThreadMetadata]:
-        stmt = select(models.EmailThreadMetadata).order_by(
-            models.EmailThreadMetadata.last_message_at.desc().nullslast(),
-            models.EmailThreadMetadata.updated_at.desc(),
-        )
-        if provider:
-            stmt = stmt.where(models.EmailThreadMetadata.provider == provider)
-        return list(self.db.scalars(stmt))
 
 
 class ImportSessionRepository(SqlAlchemyRepository[models.ImportSession]):

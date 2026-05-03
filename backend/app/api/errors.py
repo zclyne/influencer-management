@@ -53,13 +53,21 @@ async def validation_exception_handler(
     request: Request,
     exc: RequestValidationError,
 ) -> JSONResponse:
+    errors = []
+    for error in exc.errors():
+        cleaned = dict(error)
+        if isinstance(cleaned.get("ctx"), dict):
+            cleaned["ctx"] = {
+                key: str(value) for key, value in cleaned["ctx"].items()
+            }
+        errors.append(cleaned)
     return JSONResponse(
         status_code=422,
         content=api_error_payload(
             code="validation_error",
             message="Request validation failed.",
             details=jsonable_encoder(
-                {"errors": exc.errors(), "path": str(request.url.path)}
+                {"errors": errors, "path": str(request.url.path)}
             ),
         ),
     )

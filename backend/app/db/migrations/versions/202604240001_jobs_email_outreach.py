@@ -1,4 +1,4 @@
-"""add jobs email metadata and templates
+"""add jobs and templates
 
 Revision ID: 202604240001
 Revises: 202604160001
@@ -25,7 +25,6 @@ def downgrade() -> None:
     for table_name in (
         "templates",
         "job_records",
-        "email_thread_metadata",
-        "email_accounts",
     ):
-        Base.metadata.tables[table_name].drop(bind=bind, checkfirst=True)
+        if table_name in Base.metadata.tables:
+            Base.metadata.tables[table_name].drop(bind=bind, checkfirst=True)

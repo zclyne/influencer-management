@@ -1,102 +1,80 @@
 from datetime import datetime
-from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from app.enums import EmailLinkType
+
+class GmailAuthStatusResponse(BaseModel):
+    connected: bool
+    email: str | None = None
+    google_subject: str | None = None
+    scopes: list[str] = Field(default_factory=list)
+    expires_at: datetime | None = None
+    reconnect_required: bool = False
+
+
+class GmailAuthStartResponse(BaseModel):
+    authorization_url: str
+
+
+class GmailLabelResponse(BaseModel):
+    id: str
+    name: str
+    type: str | None = None
+
+
+class GmailLabelListResponse(BaseModel):
+    labels: list[GmailLabelResponse]
 
 
 class EmailParticipant(BaseModel):
-    email: str = Field(min_length=3, max_length=320)
+    email: str | None = None
     name: str | None = None
 
 
-class EmailThreadMetadataResponse(BaseModel):
+class EmailCrmLink(BaseModel):
+    type: str
+    label_id: str
+    label_name: str
+    campaign_id: str | None = None
+    deal_id: str | None = None
+
+
+class GmailThreadSummary(BaseModel):
     id: str
-    provider: str
-    external_thread_id: str
-    account_id: str | None = None
     subject: str | None = None
+    snippet: str | None = None
     participants: list[EmailParticipant] = Field(default_factory=list)
     last_message_at: datetime | None = None
+    message_count: int = 0
+    labels: list[GmailLabelResponse] = Field(default_factory=list)
+    crm_links: list[EmailCrmLink] = Field(default_factory=list)
+
+
+class GmailThreadListResponse(BaseModel):
+    threads: list[GmailThreadSummary]
+    next_page_token: str | None = None
+
+
+class GmailMessageResponse(BaseModel):
+    id: str
+    sender: EmailParticipant | None = None
+    to: list[EmailParticipant] = Field(default_factory=list)
+    cc: list[EmailParticipant] = Field(default_factory=list)
+    sent_at: datetime | None = None
     snippet: str | None = None
-    message_count: int
-    created_at: datetime
-    updated_at: datetime
+    body_text: str | None = None
+    body_html: str | None = None
 
 
-class EmailThreadListResponse(BaseModel):
-    threads: list[EmailThreadMetadataResponse]
+class GmailThreadDetailResponse(GmailThreadSummary):
+    messages: list[GmailMessageResponse] = Field(default_factory=list)
 
 
-class EmailThreadMatchRequest(BaseModel):
-    provider: str
-    external_thread_id: str
-    participants: list[EmailParticipant] = Field(default_factory=list)
-    message_count: int | None = None
-
-
-class EmailThreadCandidate(BaseModel):
-    type: str
-    confidence: Decimal | None = None
-    influencer_id: str | None = None
+class EmailThreadLinkRequest(BaseModel):
     campaign_id: str | None = None
     deal_id: str | None = None
-    contact_id: str | None = None
-    link_id: str | None = None
-    reason: str
-    suggested_status: str | None = None
-
-
-class EmailThreadMatchResponse(BaseModel):
-    provider: str
-    external_thread_id: str
-    candidates: list[EmailThreadCandidate]
-
-
-class EmailThreadLinkCreateRequest(BaseModel):
-    provider: str
-    external_thread_id: str
-    external_message_id: str | None = None
-    influencer_id: str | None = None
-    campaign_id: str | None = None
-    deal_id: str | None = None
-    contact_id: str | None = None
-    linked_by: str | None = None
-
-
-class EmailThreadLinkUpdateRequest(BaseModel):
-    influencer_id: str | None = None
-    campaign_id: str | None = None
-    deal_id: str | None = None
-    contact_id: str | None = None
-    linked_by: str | None = None
 
 
 class EmailThreadLinkResponse(BaseModel):
-    id: str
-    provider: str
-    external_thread_id: str
-    external_message_id: str | None = None
-    influencer_id: str | None = None
-    campaign_id: str | None = None
-    deal_id: str | None = None
-    contact_id: str | None = None
-    link_type: EmailLinkType
-    confidence: Decimal | None = None
-    linked_by: str | None = None
-    created_at: datetime
-    updated_at: datetime
-
-
-class EmailThreadLinkListResponse(BaseModel):
-    links: list[EmailThreadLinkResponse]
-
-
-class ScopedEmailThreadResponse(BaseModel):
-    link: EmailThreadLinkResponse
-    thread: EmailThreadMetadataResponse | None = None
-
-
-class ScopedEmailThreadListResponse(BaseModel):
-    threads: list[ScopedEmailThreadResponse]
+    thread_id: str
+    links: list[EmailCrmLink]

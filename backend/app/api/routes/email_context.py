@@ -1,25 +1,23 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.common import ApiErrorResponse
 from app.schemas.email_context import (
-    EmailThreadLinkCreateRequest,
-    EmailThreadLinkListResponse,
+    EmailThreadLinkRequest,
     EmailThreadLinkResponse,
-    EmailThreadLinkUpdateRequest,
-    EmailThreadListResponse,
-    EmailThreadMatchRequest,
-    EmailThreadMatchResponse,
-    EmailThreadMetadataResponse,
-    ScopedEmailThreadListResponse,
+    GmailAuthStartResponse,
+    GmailAuthStatusResponse,
+    GmailLabelListResponse,
+    GmailThreadDetailResponse,
+    GmailThreadListResponse,
 )
 from app.services.email_context import EmailContextService, EmailContextServiceError
 
-router = APIRouter(tags=["email"])
+router = APIRouter(prefix="/email", tags=["email"])
 
 
 def _http_error_response(error: EmailContextServiceError) -> JSONResponse:
@@ -34,148 +32,156 @@ def _http_error_response(error: EmailContextServiceError) -> JSONResponse:
     )
 
 
-ERROR_RESPONSES = {404: {"model": ApiErrorResponse}, 422: {"model": ApiErrorResponse}}
+ERROR_RESPONSES = {
+    401: {"model": ApiErrorResponse},
+    404: {"model": ApiErrorResponse},
+    422: {"model": ApiErrorResponse},
+    502: {"model": ApiErrorResponse},
+}
 
 
-@router.get("/email/threads", response_model=EmailThreadListResponse, responses=ERROR_RESPONSES)
-def list_threads(
-    db: Annotated[Session, Depends(get_db)],
-    provider: str | None = None,
-) -> EmailThreadListResponse | JSONResponse:
+@router.get("/auth/status", response_model=GmailAuthStatusResponse, responses=ERROR_RESPONSES)
+def auth_status(db: Annotated[Session, Depends(get_db)]) -> GmailAuthStatusResponse | JSONResponse:
     try:
-        return EmailContextService(db).list_threads(provider=provider)
+        return EmailContextService(db).auth_status()
     except EmailContextServiceError as exc:
         return _http_error_response(exc)
 
 
-@router.get(
-    "/email/threads/{provider}/{external_thread_id}",
-    response_model=EmailThreadMetadataResponse,
-    responses=ERROR_RESPONSES,
-)
-def get_thread(
-    provider: str,
-    external_thread_id: str,
-    db: Annotated[Session, Depends(get_db)],
-) -> EmailThreadMetadataResponse | JSONResponse:
+@router.post("/auth/start", response_model=GmailAuthStartResponse, responses=ERROR_RESPONSES)
+def start_auth(db: Annotated[Session, Depends(get_db)]) -> GmailAuthStartResponse | JSONResponse:
     try:
-        return EmailContextService(db).get_thread(provider, external_thread_id)
+        return EmailContextService(db).start_auth()
     except EmailContextServiceError as exc:
         return _http_error_response(exc)
 
 
-@router.post(
-    "/email/threads/match",
-    response_model=EmailThreadMatchResponse,
-    responses=ERROR_RESPONSES,
-)
-def match_thread(
-    payload: EmailThreadMatchRequest,
+@router.get("/auth/callback", response_model=None, responses=ERROR_RESPONSES)
+def auth_callback(
     db: Annotated[Session, Depends(get_db)],
-) -> EmailThreadMatchResponse | JSONResponse:
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> RedirectResponse | JSONResponse:
+    service = EmailContextService(db)
+    frontend_url = service.settings.gmail_frontend_redirect_uri
+    if error:
+        return RedirectResponse(
+            url=f"{frontend_url}?gmailError={error}",
+            status_code=status.HTTP_302_FOUND,
+        )
+    if not code:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content=ApiErrorResponse(
+                code="missing_oauth_code",
+                message="Google OAuth callback did not include a code.",
+                details={},
+                request_id=None,
+            ).model_dump(),
+        )
     try:
-        return EmailContextService(db).match_thread(payload)
-    except EmailContextServiceError as exc:
-        return _http_error_response(exc)
-
-
-@router.get(
-    "/email/thread-links",
-    response_model=EmailThreadLinkListResponse,
-    responses=ERROR_RESPONSES,
-)
-def list_links(
-    db: Annotated[Session, Depends(get_db)],
-    provider: str | None = None,
-    external_thread_id: str | None = None,
-    deal_id: str | None = None,
-    influencer_id: str | None = None,
-) -> EmailThreadLinkListResponse | JSONResponse:
-    try:
-        return EmailContextService(db).list_links(
-            provider=provider,
-            external_thread_id=external_thread_id,
-            deal_id=deal_id,
-            influencer_id=influencer_id,
+        service.complete_auth(code, state)
+        return RedirectResponse(
+            url=f"{frontend_url}?gmailConnected=1",
+            status_code=status.HTTP_302_FOUND,
         )
     except EmailContextServiceError as exc:
         return _http_error_response(exc)
 
 
 @router.post(
-    "/email/thread-links",
-    status_code=status.HTTP_201_CREATED,
-    response_model=EmailThreadLinkResponse,
-    responses=ERROR_RESPONSES,
-)
-def create_link(
-    payload: EmailThreadLinkCreateRequest,
-    db: Annotated[Session, Depends(get_db)],
-) -> EmailThreadLinkResponse | JSONResponse:
-    try:
-        return EmailContextService(db).create_link(payload)
-    except EmailContextServiceError as exc:
-        return _http_error_response(exc)
-
-
-@router.patch(
-    "/email/thread-links/{link_id}",
-    response_model=EmailThreadLinkResponse,
-    responses=ERROR_RESPONSES,
-)
-def update_link(
-    link_id: str,
-    payload: EmailThreadLinkUpdateRequest,
-    db: Annotated[Session, Depends(get_db)],
-) -> EmailThreadLinkResponse | JSONResponse:
-    try:
-        return EmailContextService(db).update_link(link_id, payload)
-    except EmailContextServiceError as exc:
-        return _http_error_response(exc)
-
-
-@router.delete(
-    "/email/thread-links/{link_id}",
+    "/auth/disconnect",
     status_code=status.HTTP_204_NO_CONTENT,
     response_model=None,
     responses=ERROR_RESPONSES,
 )
-def delete_link(
-    link_id: str,
-    db: Annotated[Session, Depends(get_db)],
-) -> Response | JSONResponse:
+def disconnect(db: Annotated[Session, Depends(get_db)]) -> Response | JSONResponse:
     try:
-        EmailContextService(db).delete_link(link_id)
+        EmailContextService(db).disconnect()
     except EmailContextServiceError as exc:
         return _http_error_response(exc)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get(
-    "/deals/{deal_id}/email-threads",
-    response_model=ScopedEmailThreadListResponse,
-    responses=ERROR_RESPONSES,
-)
-def list_deal_threads(
-    deal_id: str,
-    db: Annotated[Session, Depends(get_db)],
-) -> ScopedEmailThreadListResponse | JSONResponse:
+@router.get("/labels", response_model=GmailLabelListResponse, responses=ERROR_RESPONSES)
+def list_labels(db: Annotated[Session, Depends(get_db)]) -> GmailLabelListResponse | JSONResponse:
     try:
-        return EmailContextService(db).list_deal_threads(deal_id)
+        return EmailContextService(db).list_labels()
+    except EmailContextServiceError as exc:
+        return _http_error_response(exc)
+
+
+@router.get("/threads", response_model=GmailThreadListResponse, responses=ERROR_RESPONSES)
+def list_threads(
+    db: Annotated[Session, Depends(get_db)],
+    campaign_id: str | None = None,
+    deal_id: str | None = None,
+    q: str | None = None,
+    label: str | None = None,
+    page_token: str | None = None,
+    page_size: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> GmailThreadListResponse | JSONResponse:
+    try:
+        return EmailContextService(db).list_threads(
+            campaign_id=campaign_id,
+            deal_id=deal_id,
+            query=q,
+            label=label,
+            page_token=page_token,
+            page_size=page_size,
+        )
     except EmailContextServiceError as exc:
         return _http_error_response(exc)
 
 
 @router.get(
-    "/influencers/{influencer_id}/email-threads",
-    response_model=ScopedEmailThreadListResponse,
+    "/threads/{thread_id}",
+    response_model=GmailThreadDetailResponse,
     responses=ERROR_RESPONSES,
 )
-def list_influencer_threads(
-    influencer_id: str,
+def get_thread(
+    thread_id: str,
     db: Annotated[Session, Depends(get_db)],
-) -> ScopedEmailThreadListResponse | JSONResponse:
+) -> GmailThreadDetailResponse | JSONResponse:
     try:
-        return EmailContextService(db).list_influencer_threads(influencer_id)
+        return EmailContextService(db).get_thread(thread_id)
+    except EmailContextServiceError as exc:
+        return _http_error_response(exc)
+
+
+@router.post(
+    "/threads/{thread_id}/links",
+    response_model=EmailThreadLinkResponse,
+    responses=ERROR_RESPONSES,
+)
+def link_thread(
+    thread_id: str,
+    payload: EmailThreadLinkRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> EmailThreadLinkResponse | JSONResponse:
+    try:
+        return EmailContextService(db).link_thread(thread_id, payload)
+    except EmailContextServiceError as exc:
+        return _http_error_response(exc)
+
+
+@router.delete(
+    "/threads/{thread_id}/links",
+    response_model=EmailThreadLinkResponse,
+    responses=ERROR_RESPONSES,
+)
+def unlink_thread(
+    thread_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    campaign_id: str | None = None,
+    deal_id: str | None = None,
+) -> EmailThreadLinkResponse | JSONResponse:
+    try:
+        return EmailContextService(db).unlink_thread(
+            thread_id,
+            campaign_id=campaign_id,
+            deal_id=deal_id,
+        )
     except EmailContextServiceError as exc:
         return _http_error_response(exc)

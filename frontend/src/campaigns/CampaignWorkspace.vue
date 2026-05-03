@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
-import { message, Modal, type TableColumnsType } from 'ant-design-vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
 import type {
+  CampaignStatus,
+  CampaignUpdateRequest,
   DealPipelineRow,
   DealStatus,
   InfluencerListItem,
@@ -19,11 +21,35 @@ import {
   dealStatusLabels,
   useCampaignWorkspace,
 } from './useCampaignWorkspace'
+import { campaignStatusLabels, campaignStatuses } from './useCampaigns'
+
+interface CampaignEditForm {
+  name: string
+  status: CampaignStatus
+  budget: number | null
+  startDate: string | null
+  endDate: string | null
+  brief: string
+  notes: string
+}
 
 const route = useRoute()
+const router = useRouter()
 const campaignId = computed(() => String(route.params.campaignId ?? ''))
+const campaignFormRef = ref<FormInstance>()
 const addFromLibraryOpen = ref(false)
+const campaignEditOpen = ref(false)
 const bulkStatus = ref<DealStatus | undefined>()
+
+const campaignForm = reactive<CampaignEditForm>({
+  name: '',
+  status: 'PLANNING',
+  budget: null,
+  startDate: null,
+  endDate: null,
+  brief: '',
+  notes: '',
+})
 
 const {
   campaign,
@@ -35,7 +61,6 @@ const {
   searchText,
   statusFilter,
   platformFilter,
-  hasEmailThreadFilter,
   includeArchived,
   selectedRowKeys,
   selectedDeal,
@@ -46,6 +71,8 @@ const {
   platformOptions,
   loadWorkspace,
   selectDeal,
+  updateCampaignProfile,
+  archiveCampaignProfile,
   addInfluencersToCampaign,
   bulkUpdateSelectedDeals,
   archiveDeal,
@@ -95,11 +122,6 @@ const columns: TableColumnsType<DealPipelineRow> = [
     width: 170,
   },
   {
-    title: 'Email',
-    key: 'email',
-    width: 120,
-  },
-  {
     title: 'Updated',
     key: 'updated',
     dataIndex: 'updated_at',
@@ -111,7 +133,7 @@ const columns: TableColumnsType<DealPipelineRow> = [
     title: 'Actions',
     key: 'actions',
     fixed: 'right',
-    width: 190,
+    width: 250,
   },
 ]
 
@@ -142,10 +164,12 @@ const statusOptions = computed(() =>
   })),
 )
 
-const emailFilterOptions = [
-  { label: 'Has email thread', value: true },
-  { label: 'No email thread', value: false },
-]
+const campaignStatusOptions = computed(() =>
+  campaignStatuses.map((status) => ({
+    label: campaignStatusLabels[status],
+    value: status,
+  })),
+)
 
 const rowSelection = computed(() => ({
   selectedRowKeys: selectedRowKeys.value,
@@ -174,19 +198,35 @@ const formatNumber = (value: number | null | undefined) => {
   )
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-US', {
+const formatCurrency = (value: string | number | null | undefined) => {
+  if (value === null || value === undefined || value === '') return 'Not set'
+  const amount = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(amount)) return String(value)
+
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     maximumFractionDigits: 0,
-  }).format(value)
+  }).format(amount)
+}
 
-const formatDate = (value: string) =>
-  new Intl.DateTimeFormat('en-US', {
+const formatDate = (value: string | null | undefined) => {
+  if (!value) return 'Not set'
+  return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   }).format(new Date(value))
+}
+
+const formatDateRange = () => {
+  const start = formatDate(campaign.value?.start_date)
+  const end = formatDate(campaign.value?.end_date)
+  if (start === 'Not set' && end === 'Not set') return 'Not set'
+  if (start === 'Not set') return `Ends ${end}`
+  if (end === 'Not set') return `Starts ${start}`
+  return `${start} - ${end}`
+}
 
 const formatLocation = (record: InfluencerListItem) =>
   [record.city, record.country].filter(Boolean).join(', ') || 'Not set'
@@ -211,6 +251,83 @@ const statusColor = (status: DealStatus) => {
 }
 
 const statusLabel = (status: DealStatus) => dealStatusLabels[status]
+
+const campaignStatusColor = (status: CampaignStatus) => {
+  if (status === 'ACTIVE') return 'green'
+  if (status === 'EVALUATING') return 'gold'
+  if (status === 'CLOSED') return 'default'
+  return 'blue'
+}
+
+const campaignStatusLabel = (status: CampaignStatus) => campaignStatusLabels[status]
+
+const brandLabel = computed(() => {
+  if (!campaign.value?.brands.length) return 'No brands'
+  return campaign.value.brands.map((link) => link.brand.name).join(', ')
+})
+
+const resetCampaignForm = () => {
+  const budgetValue =
+    campaign.value?.budget === null || campaign.value?.budget === undefined
+      ? null
+      : Number(campaign.value.budget)
+  campaignForm.name = campaign.value?.name ?? ''
+  campaignForm.status = campaign.value?.status ?? 'PLANNING'
+  campaignForm.budget = budgetValue === null || !Number.isFinite(budgetValue) ? null : budgetValue
+  campaignForm.startDate = campaign.value?.start_date ?? null
+  campaignForm.endDate = campaign.value?.end_date ?? null
+  campaignForm.brief = campaign.value?.brief ?? ''
+  campaignForm.notes = campaign.value?.notes ?? ''
+  campaignFormRef.value?.clearValidate()
+}
+
+const buildCampaignPayload = (): CampaignUpdateRequest => ({
+  name: campaignForm.name.trim(),
+  status: campaignForm.status,
+  budget: campaignForm.budget,
+  start_date: campaignForm.startDate,
+  end_date: campaignForm.endDate,
+  brief: campaignForm.brief.trim() || null,
+  notes: campaignForm.notes.trim() || null,
+})
+
+const openCampaignEdit = () => {
+  resetCampaignForm()
+  campaignEditOpen.value = true
+}
+
+const submitCampaignEdit = async () => {
+  await campaignFormRef.value?.validate()
+
+  try {
+    await updateCampaignProfile(buildCampaignPayload())
+    message.success('Campaign updated.')
+    campaignEditOpen.value = false
+  } catch {
+    message.error('Campaign could not be updated.')
+  }
+}
+
+const confirmCampaignDelete = () => {
+  if (!campaign.value) return
+
+  Modal.confirm({
+    title: 'Delete this campaign?',
+    content: 'Deleted campaigns are hidden from the default list but remain available in history.',
+    okText: 'Delete',
+    okType: 'danger',
+    cancelText: 'Cancel',
+    async onOk() {
+      try {
+        await archiveCampaignProfile()
+        message.success(`${campaign.value?.name ?? 'Campaign'} deleted.`)
+        await router.push({ name: 'campaigns' })
+      } catch {
+        message.error('Campaign could not be deleted.')
+      }
+    },
+  })
+}
 
 const openAddFromLibrary = async () => {
   selectedInfluencerRowKeys.value = []
@@ -316,12 +433,26 @@ void loadWorkspace()
     <div class="page-heading">
       <div>
         <h1>{{ campaign?.name ?? 'Campaign workspace' }}</h1>
-        <p class="page-description">
-          Manage campaign deals, add influencers from the library, and export the current campaign view.
-        </p>
+        <div v-if="campaign" class="campaign-status-row">
+          <a-tag :color="campaignStatusColor(campaign.status)">
+            {{ campaignStatusLabel(campaign.status) }}
+          </a-tag>
+          <a-tag v-if="campaign.archived_at" color="red">Deleted</a-tag>
+          <span>Updated {{ formatDate(campaign.updated_at) }}</span>
+        </div>
       </div>
       <div class="page-actions">
-        <a-button @click="openAddFromLibrary">Add from library</a-button>
+        <a-button :disabled="!campaign || Boolean(campaign.archived_at)" @click="openCampaignEdit">
+          Edit campaign
+        </a-button>
+        <a-button
+          danger
+          :disabled="!campaign || Boolean(campaign.archived_at)"
+          :loading="mutating"
+          @click="confirmCampaignDelete"
+        >
+          Delete campaign
+        </a-button>
         <RouterLink :to="{ name: 'email', query: { campaignId } }">
           <a-button>Open email</a-button>
         </RouterLink>
@@ -330,6 +461,30 @@ void loadWorkspace()
     </div>
 
     <a-alert v-if="error" class="page-alert" type="error" :message="error" show-icon />
+
+    <div v-if="campaign" class="campaign-overview">
+      <a-card size="small">
+        <span>Budget</span>
+        <strong>{{ formatCurrency(campaign.budget) }}</strong>
+      </a-card>
+      <a-card size="small">
+        <span>Timeline</span>
+        <strong>{{ formatDateRange() }}</strong>
+      </a-card>
+      <a-card size="small">
+        <span>Brands</span>
+        <strong>{{ brandLabel }}</strong>
+      </a-card>
+      <a-card size="small">
+        <span>Notes</span>
+        <strong>{{ campaign.notes || 'No notes' }}</strong>
+      </a-card>
+    </div>
+
+    <a-card v-if="campaign" class="campaign-brief-card" size="small">
+      <template #title>Brief</template>
+      <p>{{ campaign.brief || 'No brief yet.' }}</p>
+    </a-card>
 
     <div class="summary-grid">
       <a-card size="small">
@@ -351,6 +506,20 @@ void loadWorkspace()
     </div>
 
     <a-card class="table-card" :body-style="{ padding: '0' }">
+      <div class="table-title-row">
+        <div>
+          <h2>Deals</h2>
+          <p>Add influencers from the library to create campaign deals.</p>
+        </div>
+        <a-button
+          type="primary"
+          :disabled="!campaign || Boolean(campaign.archived_at)"
+          @click="openAddFromLibrary"
+        >
+          Add influencers from library
+        </a-button>
+      </div>
+
       <div class="table-toolbar">
         <div class="table-toolbar-controls">
           <a-input-search
@@ -372,13 +541,6 @@ void loadWorkspace()
             allow-clear
             placeholder="All platforms"
             :options="platformOptions"
-          />
-          <a-select
-            v-model:value="hasEmailThreadFilter"
-            class="email-filter"
-            allow-clear
-            placeholder="Email state"
-            :options="emailFilterOptions"
           />
           <label class="archive-toggle">
             <span>Include deleted</span>
@@ -415,12 +577,17 @@ void loadWorkspace()
         :pagination="{ pageSize: 10, showSizeChanger: true }"
         :row-key="(record: DealPipelineRow) => record.id"
         :row-selection="rowSelection"
-        :scroll="{ x: 1340 }"
+        :scroll="{ x: 1400 }"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'creator'">
             <div class="creator-cell">
-              <RouterLink :to="{ name: 'influencerDetail', params: { influencerId: record.influencer.id } }">
+              <RouterLink
+                :to="{
+                  name: 'dealDetail',
+                  params: { campaignId: record.campaign_id, dealId: record.id },
+                }"
+              >
                 {{ record.influencer.display_name }}
               </RouterLink>
               <span v-if="record.primary_contact">{{ record.primary_contact.email }}</span>
@@ -454,17 +621,21 @@ void loadWorkspace()
             <span>{{ record.compensation.label ?? 'No cost items' }}</span>
           </template>
 
-          <template v-else-if="column.key === 'email'">
-            <span>{{ record.email_threads.thread_count }} threads</span>
-          </template>
-
           <template v-else-if="column.key === 'updated'">
             <span>{{ formatDate(record.updated_at) }}</span>
           </template>
 
           <template v-else-if="column.key === 'actions'">
             <a-space>
-              <a-button type="link" @click="selectDeal(record)">Review</a-button>
+              <a-button type="link" @click="selectDeal(record)">Quick review</a-button>
+              <RouterLink
+                :to="{
+                  name: 'dealDetail',
+                  params: { campaignId: record.campaign_id, dealId: record.id },
+                }"
+              >
+                <a-button type="link">Open deal</a-button>
+              </RouterLink>
               <a-popconfirm
                 v-if="!record.archived_at"
                 title="Delete this deal?"
@@ -480,6 +651,64 @@ void loadWorkspace()
         </template>
       </a-table>
     </a-card>
+
+    <a-modal
+      v-model:open="campaignEditOpen"
+      title="Edit campaign"
+      ok-text="Save"
+      cancel-text="Cancel"
+      :confirm-loading="mutating"
+      destroy-on-close
+      @ok="submitCampaignEdit"
+    >
+      <a-form ref="campaignFormRef" :model="campaignForm" layout="vertical">
+        <a-form-item
+          label="Name"
+          name="name"
+          :rules="[{ required: true, message: 'Campaign name is required.' }]"
+        >
+          <a-input v-model:value="campaignForm.name" />
+        </a-form-item>
+
+        <a-form-item label="Status" name="status">
+          <a-select v-model:value="campaignForm.status" :options="campaignStatusOptions" />
+        </a-form-item>
+
+        <a-form-item label="Budget" name="budget">
+          <a-input-number
+            v-model:value="campaignForm.budget"
+            :min="0"
+            :precision="2"
+            class="full-width"
+          />
+        </a-form-item>
+
+        <div class="form-grid">
+          <a-form-item label="Start date" name="startDate">
+            <a-date-picker
+              v-model:value="campaignForm.startDate"
+              value-format="YYYY-MM-DD"
+              class="full-width"
+            />
+          </a-form-item>
+          <a-form-item label="End date" name="endDate">
+            <a-date-picker
+              v-model:value="campaignForm.endDate"
+              value-format="YYYY-MM-DD"
+              class="full-width"
+            />
+          </a-form-item>
+        </div>
+
+        <a-form-item label="Brief" name="brief">
+          <a-textarea v-model:value="campaignForm.brief" :rows="3" />
+        </a-form-item>
+
+        <a-form-item label="Notes" name="notes">
+          <a-textarea v-model:value="campaignForm.notes" :rows="3" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
 
     <a-modal
       v-model:open="addFromLibraryOpen"
@@ -595,8 +824,48 @@ h1 {
   gap: 10px;
 }
 
+.campaign-status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  color: #697582;
+}
+
 .page-alert {
   border-radius: 8px;
+}
+
+.campaign-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.campaign-overview :deep(.ant-card-body) {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.campaign-overview span {
+  color: #697582;
+}
+
+.campaign-overview strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #20262d;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.campaign-brief-card p {
+  margin: 0;
+  color: #3f4954;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 .summary-grid {
@@ -638,6 +907,26 @@ h1 {
   padding-inline: 14px;
 }
 
+.table-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 14px;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.table-title-row h2 {
+  margin: 0;
+  color: #20262d;
+  font-size: 18px;
+}
+
+.table-title-row p {
+  margin: 4px 0 0;
+  color: #697582;
+}
+
 .table-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -675,7 +964,6 @@ h1 {
 
 .status-filter,
 .platform-filter,
-.email-filter,
 .bulk-status {
   width: 160px;
 }
@@ -709,10 +997,26 @@ h1 {
   gap: 6px;
 }
 
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.full-width {
+  width: 100%;
+}
+
 @media (max-width: 980px) {
   .page-heading,
+  .table-title-row,
   .table-toolbar {
     display: grid;
+  }
+
+  .page-actions,
+  .table-title-row {
+    justify-content: flex-start;
   }
 
   .page-actions,
@@ -720,17 +1024,20 @@ h1 {
     justify-content: flex-start;
   }
 
+  .campaign-overview,
   .summary-grid {
     grid-template-columns: repeat(2, minmax(140px, 1fr));
   }
 }
 
 @media (max-width: 640px) {
+  .campaign-overview,
   .summary-grid {
     grid-template-columns: 1fr;
   }
 
   .page-actions,
+  .table-title-row,
   .table-toolbar-actions,
   .modal-toolbar {
     display: grid;
@@ -738,13 +1045,17 @@ h1 {
 
   .page-actions a,
   .page-actions button,
+  .table-title-row button,
   .table-toolbar-actions button,
   .search-input,
   .status-filter,
   .platform-filter,
-  .email-filter,
   .bulk-status {
     width: 100%;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

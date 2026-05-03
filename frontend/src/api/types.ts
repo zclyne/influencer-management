@@ -17,6 +17,16 @@ export interface CampaignCreateRequest {
   notes?: string | null
 }
 
+export interface CampaignUpdateRequest {
+  name?: string | null
+  brief?: string | null
+  budget?: string | number | null
+  start_date?: string | null
+  end_date?: string | null
+  status?: CampaignStatus | null
+  notes?: string | null
+}
+
 export interface CampaignResponse {
   id: string
   name: string
@@ -489,11 +499,6 @@ export interface CompensationSummary {
   label?: string | null
 }
 
-export interface EmailThreadSummary {
-  thread_count: number
-  last_activity_at?: string | null
-}
-
 export interface DealPipelineRow {
   id: string
   campaign_id: string
@@ -507,7 +512,6 @@ export interface DealPipelineRow {
   primary_contact?: PrimaryContactSummary | null
   deliverables: DeliverableSummary
   compensation: CompensationSummary
-  email_threads: EmailThreadSummary
   completion_suggested: boolean
   updated_at: string
   archived_at?: string | null
@@ -649,4 +653,81 @@ export interface CompensationItemResponse {
 
 export interface CompensationItemListResponse {
   compensation_items: CompensationItemResponse[]
+}
+
+export interface GmailAuthStatusResponse {
+  connected: boolean
+  email?: string | null
+  google_subject?: string | null
+  scopes: string[]
+  expires_at?: string | null
+  reconnect_required: boolean
+}
+
+export interface GmailAuthStartResponse {
+  authorization_url: string
+}
+
+export interface GmailLabelResponse {
+  id: string
+  name: string
+  type?: string | null
+}
+
+export interface GmailLabelListResponse {
+  labels: GmailLabelResponse[]
+}
+
+export interface EmailParticipant {
+  email?: string | null
+  name?: string | null
+}
+
+export interface EmailCrmLink {
+  type: 'campaign' | 'deal' | string
+  label_id: string
+  label_name: string
+  campaign_id?: string | null
+  deal_id?: string | null
+}
+
+export interface GmailThreadSummary {
+  id: string
+  subject?: string | null
+  snippet?: string | null
+  participants: EmailParticipant[]
+  last_message_at?: string | null
+  message_count: number
+  labels: GmailLabelResponse[]
+  crm_links: EmailCrmLink[]
+}
+
+export interface GmailThreadListResponse {
+  threads: GmailThreadSummary[]
+  next_page_token?: string | null
+}
+
+export interface GmailMessageResponse {
+  id: string
+  sender?: EmailParticipant | null
+  to: EmailParticipant[]
+  cc: EmailParticipant[]
+  sent_at?: string | null
+  snippet?: string | null
+  body_text?: string | null
+  body_html?: string | null
+}
+
+export interface GmailThreadDetailResponse extends GmailThreadSummary {
+  messages: GmailMessageResponse[]
+}
+
+export interface EmailThreadLinkRequest {
+  campaign_id?: string | null
+  deal_id?: string | null
+}
+
+export interface EmailThreadLinkResponse {
+  thread_id: string
+  links: EmailCrmLink[]
 }

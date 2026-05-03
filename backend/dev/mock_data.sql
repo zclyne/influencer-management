@@ -214,48 +214,6 @@ ON CONFLICT(id) DO UPDATE SET
   notes = excluded.notes,
   updated_at = excluded.updated_at;
 
-INSERT INTO email_accounts (id, provider, email, display_name, sync_status, last_synced_at, created_at, updated_at) VALUES
-  ('cccccccc-cccc-cccc-cccc-ccccccccccc1', 'gmail', 'agency@example.com', 'Agency Shared Inbox', 'idle', '2026-04-27 09:00:00', '2026-04-01 09:00:00', '2026-04-27 09:00:00')
-ON CONFLICT(id) DO UPDATE SET
-  provider = excluded.provider,
-  email = excluded.email,
-  display_name = excluded.display_name,
-  sync_status = excluded.sync_status,
-  last_synced_at = excluded.last_synced_at,
-  updated_at = excluded.updated_at;
-
-INSERT INTO email_thread_metadata (id, provider, external_thread_id, account_id, subject, participants_json, last_message_at, snippet, message_count, created_at, updated_at) VALUES
-  ('dddddddd-dddd-dddd-dddd-ddddddddddd1', 'gmail', 'thread-maya-serum', 'cccccccc-cccc-cccc-cccc-ccccccccccc1', 'Spring serum launch details', json('[{"email":"maya@example.com","name":"Maya Chen"},{"email":"agency@example.com","name":"Agency"}]'), '2026-04-27 09:30:00', 'Maya confirmed the serum integration timeline.', 6, '2026-04-20 09:00:00', '2026-04-27 09:30:00'),
-  ('dddddddd-dddd-dddd-dddd-ddddddddddd2', 'gmail', 'thread-riley-kit', 'cccccccc-cccc-cccc-cccc-ccccccccccc1', 'Trail kit scope', json('[{"email":"sam.manager@example.com","name":"Sam Manager"},{"email":"agency@example.com","name":"Agency"}]'), '2026-04-24 09:30:00', 'Sam asked for gear shipment timing.', 4, '2026-04-18 09:00:00', '2026-04-24 09:30:00'),
-  ('dddddddd-dddd-dddd-dddd-ddddddddddd3', 'gmail', 'thread-avery-travel', 'cccccccc-cccc-cccc-cccc-ccccccccccc1', 'Avery travel reimbursement', json('[{"email":"sam.manager@example.com","name":"Sam Manager"},{"email":"agency@example.com","name":"Agency"}]'), '2026-04-23 09:30:00', 'Travel reimbursement terms are being reviewed.', 5, '2026-04-19 09:00:00', '2026-04-23 09:30:00')
-ON CONFLICT(id) DO UPDATE SET
-  provider = excluded.provider,
-  external_thread_id = excluded.external_thread_id,
-  account_id = excluded.account_id,
-  subject = excluded.subject,
-  participants_json = excluded.participants_json,
-  last_message_at = excluded.last_message_at,
-  snippet = excluded.snippet,
-  message_count = excluded.message_count,
-  updated_at = excluded.updated_at;
-
-INSERT INTO email_thread_links (id, provider, external_thread_id, external_message_id, influencer_id, campaign_id, deal_id, contact_id, link_type, confidence, linked_by, created_at, updated_at) VALUES
-  ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1', 'gmail', 'thread-maya-serum', 'msg-maya-006', '44444444-4444-4444-4444-444444444441', '22222222-2222-2222-2222-222222222221', '99999999-9999-9999-9999-999999999991', '77777777-7777-7777-7777-777777777771', 'manual', 1.000, 'mock-seed', '2026-04-27 09:35:00', '2026-04-27 09:35:00'),
-  ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee2', 'gmail', 'thread-riley-kit', 'msg-riley-004', '44444444-4444-4444-4444-444444444442', '22222222-2222-2222-2222-222222222222', '99999999-9999-9999-9999-999999999994', '77777777-7777-7777-7777-777777777772', 'inferred_from_contact', 0.880, 'mock-seed', '2026-04-24 09:35:00', '2026-04-24 09:35:00'),
-  ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee3', 'gmail', 'thread-avery-travel', 'msg-avery-005', '44444444-4444-4444-4444-444444444445', '22222222-2222-2222-2222-222222222222', '99999999-9999-9999-9999-999999999995', '77777777-7777-7777-7777-777777777775', 'manual', 1.000, 'mock-seed', '2026-04-23 09:35:00', '2026-04-23 09:35:00')
-ON CONFLICT(id) DO UPDATE SET
-  provider = excluded.provider,
-  external_thread_id = excluded.external_thread_id,
-  external_message_id = excluded.external_message_id,
-  influencer_id = excluded.influencer_id,
-  campaign_id = excluded.campaign_id,
-  deal_id = excluded.deal_id,
-  contact_id = excluded.contact_id,
-  link_type = excluded.link_type,
-  confidence = excluded.confidence,
-  linked_by = excluded.linked_by,
-  updated_at = excluded.updated_at;
-
 INSERT INTO import_sessions (id, source_type, file_name, file_hash, row_count, imported_count, skipped_count, conflict_count, target_campaign_id, created_at, updated_at) VALUES
   ('ffffffff-ffff-ffff-ffff-fffffffffff1', 'modash_csv', 'mock-modash-export.csv', 'mock-import-checksum', 8, 7, 1, 0, '22222222-2222-2222-2222-222222222221', '2026-04-20 12:10:00', '2026-04-20 12:20:00')
 ON CONFLICT(id) DO UPDATE SET
@@ -272,7 +230,6 @@ ON CONFLICT(id) DO UPDATE SET
 INSERT INTO job_records (id, type, status, progress_current, progress_total, result_json, error_code, error_message, created_at, started_at, finished_at) VALUES
   ('12121212-1212-1212-1212-121212121211', 'import.modash.preview', 'succeeded', 8, 8, json('{"rows":8,"warnings":1}'), NULL, NULL, '2026-04-20 12:00:00', '2026-04-20 12:00:01', '2026-04-20 12:00:08'),
   ('12121212-1212-1212-1212-121212121212', 'campaign.export.csv', 'succeeded', 3, 3, json('{"file_id":"88888888-8888-8888-8888-888888888882"}'), NULL, NULL, '2026-04-27 12:00:00', '2026-04-27 12:00:01', '2026-04-27 12:00:04'),
-  ('12121212-1212-1212-1212-121212121213', 'email.sync', 'failed', 2, 5, NULL, 'mock_auth_expired', 'Mock failed job for error UI testing.', '2026-04-27 13:00:00', '2026-04-27 13:00:01', '2026-04-27 13:00:05'),
   ('12121212-1212-1212-1212-121212121214', 'campaign.report.refresh', 'queued', 0, 10, NULL, NULL, NULL, '2026-04-27 14:00:00', NULL, NULL)
 ON CONFLICT(id) DO UPDATE SET
   type = excluded.type,

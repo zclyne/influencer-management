@@ -28,7 +28,6 @@ from app.schemas.deals import (
     DealPipelineRow,
     DealUpdateRequest,
     DeliverableSummary,
-    EmailThreadSummary,
     InfluencerSummary,
     PrimaryContactSummary,
     PrimaryPlatformSummary,
@@ -124,7 +123,6 @@ class DealService:
         status: DealStatus | None = None,
         platform: str | None = None,
         lost_reason: str | None = None,
-        has_email_thread: bool | None = None,
         include_archived: bool = False,
         sort: str = "updated_at",
         limit: int | None = None,
@@ -136,7 +134,6 @@ class DealService:
             status=status.value if status else None,
             platform=platform,
             lost_reason=lost_reason,
-            has_email_thread=has_email_thread,
             include_archived=include_archived,
         )
         rows = [self._pipeline_row(deal) for deal in deals]
@@ -322,7 +319,6 @@ class DealService:
     def _pipeline_row(self, deal: models.Deal) -> DealPipelineRow:
         deliverables = _deliverable_summary(deal.deliverables)
         compensation = _compensation_summary(deal.compensation_items)
-        email_threads = _email_thread_summary(deal.email_thread_links)
         return DealPipelineRow(
             id=deal.id,
             campaign_id=deal.campaign_id,
@@ -341,7 +337,6 @@ class DealService:
             primary_contact=_primary_contact(deal.influencer.contacts),
             deliverables=deliverables,
             compensation=compensation,
-            email_threads=email_threads,
             completion_suggested=_completion_suggested(
                 deal.deliverables, deal.compensation_items
             ),
@@ -573,15 +568,6 @@ def _format_money(amount: Decimal, currency: str) -> str:
 
 def _humanize_type(item_type: str) -> str:
     return item_type.lower().replace("_", " ")
-
-
-def _email_thread_summary(
-    links: list[models.EmailThreadLink],
-) -> EmailThreadSummary:
-    if not links:
-        return EmailThreadSummary()
-    last_activity = max(link.updated_at or link.created_at for link in links)
-    return EmailThreadSummary(thread_count=len(links), last_activity_at=last_activity)
 
 
 def _completion_suggested(

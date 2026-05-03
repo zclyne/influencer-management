@@ -53,15 +53,18 @@ const columns: TableColumnsType<CampaignResponse> = [
     title: 'Campaign',
     key: 'campaign',
     dataIndex: 'name',
+    width: 280,
   },
   {
     title: 'Brands',
     key: 'brands',
+    width: 240,
   },
   {
     title: 'Status',
     key: 'status',
     dataIndex: 'status',
+    width: 160,
     filters: campaignStatuses.map((status) => ({
       text: campaignStatusLabels[status],
       value: status,
@@ -73,17 +76,21 @@ const columns: TableColumnsType<CampaignResponse> = [
     key: 'budget',
     dataIndex: 'budget',
     align: 'right',
+    width: 140,
   },
   {
     title: 'Updated',
     key: 'updated',
     dataIndex: 'updated_at',
+    width: 140,
     sorter: (left, right) =>
       new Date(left.updated_at).getTime() - new Date(right.updated_at).getTime(),
   },
   {
     title: 'Actions',
     key: 'actions',
+    fixed: 'right',
+    width: 140,
   },
 ]
 
@@ -281,6 +288,7 @@ void loadCampaigns()
         :pagination="{ pageSize: 10, showSizeChanger: true }"
         :row-key="(record: CampaignResponse) => record.id"
         :row-selection="rowSelection"
+        :scroll="{ x: 1080 }"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'campaign'">

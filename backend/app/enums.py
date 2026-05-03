@@ -56,13 +56,6 @@ class ContactRole(StrEnum):
     UNKNOWN = "unknown"
 
 
-class EmailLinkType(StrEnum):
-    MANUAL = "manual"
-    INFERRED_FROM_CONTACT = "inferred_from_contact"
-    INHERITED_FROM_THREAD = "inherited_from_thread"
-    IMPORTED = "imported"
-
-
 class TemplateType(StrEnum):
     OUTREACH_EMAIL = "OUTREACH_EMAIL"
     CONTRACT = "CONTRACT"

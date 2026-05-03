@@ -142,6 +142,7 @@ const platformColumns: TableColumnsType<InfluencerPlatformResponse> = [
   {
     title: 'Actions',
     key: 'actions',
+    fixed: 'right',
     width: 150,
   },
 ]
@@ -170,6 +171,7 @@ const contactColumns: TableColumnsType<InfluencerContactResponse> = [
   {
     title: 'Actions',
     key: 'actions',
+    fixed: 'right',
     width: 150,
   },
 ]
@@ -200,6 +202,7 @@ const dealColumns: TableColumnsType<InfluencerDealSummary> = [
   {
     title: 'Actions',
     key: 'actions',
+    fixed: 'right',
     width: 130,
   },
 ]
@@ -544,6 +547,7 @@ void loadInfluencerDetail()
 
           <div class="profile-side">
             <a-space>
+              <a-button type="primary" @click="openProfileEdit">Edit</a-button>
               <a-button
                 danger
                 :disabled="Boolean(influencer.archived_at)"
@@ -552,7 +556,6 @@ void loadInfluencerDetail()
               >
                 Delete
               </a-button>
-              <a-button type="primary" @click="openProfileEdit">Edit</a-button>
             </a-space>
             <a-descriptions size="small" :column="1">
               <a-descriptions-item label="Primary contact">
@@ -676,7 +679,7 @@ void loadInfluencerDetail()
                   <strong>{{ record.email }}</strong>
                   <p v-if="record.name" class="cell-note">{{ record.name }}</p>
                   <p v-if="record.conflict_influencer_ids.length" class="cell-warning">
-                    Used by {{ record.conflict_influencer_ids.length }} other influencer(s)
+                    Same email on {{ record.conflict_influencer_ids.length }} other influencer(s)
                   </p>
                 </template>
                 <template v-else-if="column.key === 'role'">
