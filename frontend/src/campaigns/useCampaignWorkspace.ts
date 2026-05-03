@@ -53,9 +53,16 @@ const parseMoney = (value: string | number) => {
   return Number.isFinite(amount) ? amount : 0
 }
 
+interface CampaignInfluencerDeal {
+  dealId: string
+  status: DealStatus
+  archivedAt?: string | null
+}
+
 export const useCampaignWorkspace = (campaignId: () => string) => {
   const campaign = ref<CampaignResponse | null>(null)
   const deals = ref<DealPipelineRow[]>([])
+  const campaignInfluencerDeals = ref<Record<string, CampaignInfluencerDeal>>({})
   const loading = ref(false)
   const mutating = ref(false)
   const exporting = ref(false)
@@ -91,6 +98,26 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
     } finally {
       loading.value = false
     }
+  }
+
+  const loadCampaignInfluencerMembership = async () => {
+    const id = campaignId()
+    if (!id) return
+
+    const response = await listCampaignDeals(id, {
+      includeArchived: true,
+      sort: '-updated_at',
+    })
+    campaignInfluencerDeals.value = Object.fromEntries(
+      response.deals.map((deal) => [
+        deal.influencer.id,
+        {
+          dealId: deal.id,
+          status: deal.status,
+          archivedAt: deal.archived_at ?? null,
+        },
+      ]),
+    )
   }
 
   const visibleDeals = computed(() => {
@@ -311,6 +338,7 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
   return {
     campaign,
     deals,
+    campaignInfluencerDeals,
     visibleDeals,
     loading,
     mutating,
@@ -328,6 +356,7 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
     plannedSpend,
     platformOptions,
     loadWorkspace,
+    loadCampaignInfluencerMembership,
     selectDeal,
     updateCampaignProfile,
     archiveCampaignProfile,

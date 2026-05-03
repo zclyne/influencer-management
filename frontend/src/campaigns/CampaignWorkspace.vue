@@ -38,6 +38,8 @@ const router = useRouter()
 const campaignId = computed(() => String(route.params.campaignId ?? ''))
 const campaignFormRef = ref<FormInstance>()
 const addFromLibraryOpen = ref(false)
+const addFromLibraryMembershipLoading = ref(false)
+const showOnlyAvailableInfluencers = ref(true)
 const campaignEditOpen = ref(false)
 const bulkStatus = ref<DealStatus | undefined>()
 
@@ -53,6 +55,7 @@ const campaignForm = reactive<CampaignEditForm>({
 
 const {
   campaign,
+  campaignInfluencerDeals,
   visibleDeals,
   loading,
   mutating,
@@ -70,6 +73,7 @@ const {
   plannedSpend,
   platformOptions,
   loadWorkspace,
+  loadCampaignInfluencerMembership,
   selectDeal,
   updateCampaignProfile,
   archiveCampaignProfile,
@@ -184,10 +188,15 @@ const rowSelection = computed(() => ({
 const influencerRowSelection = computed(() => ({
   selectedRowKeys: selectedInfluencerRowKeys.value,
   onChange: (keys: (string | number)[]) => {
-    selectedInfluencerRowKeys.value = keys.map(String)
+    selectedInfluencerRowKeys.value = keys
+      .map(String)
+      .filter((key) => {
+        const influencer = influencers.value.find((record) => record.id === key)
+        return influencer ? isInfluencerSelectable(influencer) : false
+      })
   },
   getCheckboxProps: (record: InfluencerListItem) => ({
-    disabled: Boolean(record.archived_at),
+    disabled: !isInfluencerSelectable(record),
   }),
 }))
 
@@ -241,6 +250,21 @@ const libraryPlatformDisplayName = (platform: InfluencerListItem['platforms'][nu
   const followers = formatNumber(platform.follower_count)
   return `${platform.platform}${platform.username ? ` @${platform.username}` : ''}${followers ? ` · ${followers}` : ''}`
 }
+
+const isInfluencerAlreadyInCampaign = (influencerId: string) =>
+  Boolean(campaignInfluencerDeals.value[influencerId])
+
+const isInfluencerSelectable = (influencer: InfluencerListItem) =>
+  !influencer.archived_at && !isInfluencerAlreadyInCampaign(influencer.id)
+
+const addFromLibraryLoading = computed(
+  () => influencersLoading.value || addFromLibraryMembershipLoading.value,
+)
+
+const filteredInfluencers = computed(() => {
+  if (!showOnlyAvailableInfluencers.value) return influencers.value
+  return influencers.value.filter((influencer) => !isInfluencerAlreadyInCampaign(influencer.id))
+})
 
 const statusColor = (status: DealStatus) => {
   if (status === 'ACTIVE' || status === 'COMPLETED') return 'green'
@@ -331,11 +355,26 @@ const confirmCampaignDelete = () => {
 
 const openAddFromLibrary = async () => {
   selectedInfluencerRowKeys.value = []
+  showOnlyAvailableInfluencers.value = true
   addFromLibraryOpen.value = true
-  await loadInfluencers()
+  addFromLibraryMembershipLoading.value = true
+
+  try {
+    await Promise.all([loadCampaignInfluencerMembership(), loadInfluencers()])
+  } catch {
+    addFromLibraryOpen.value = false
+    message.error('Campaign membership could not be loaded.')
+  } finally {
+    addFromLibraryMembershipLoading.value = false
+  }
 }
 
 const submitAddFromLibrary = async () => {
+  selectedInfluencerRowKeys.value = selectedInfluencerRowKeys.value.filter(
+    (influencerId) => !isInfluencerAlreadyInCampaign(influencerId),
+  )
+  if (!selectedInfluencerRowKeys.value.length) return
+
   try {
     const result = await addInfluencersToCampaign(selectedInfluencerRowKeys.value)
     if (!result) return
@@ -416,6 +455,17 @@ watch(campaignId, () => {
   selectedRowKeys.value = []
   selectDeal(null)
   void loadWorkspace()
+})
+
+watch([filteredInfluencers, campaignInfluencerDeals], () => {
+  const selectableIds = new Set(
+    filteredInfluencers.value
+      .filter((influencer) => isInfluencerSelectable(influencer))
+      .map((influencer) => influencer.id),
+  )
+  selectedInfluencerRowKeys.value = selectedInfluencerRowKeys.value.filter((key) =>
+    selectableIds.has(key),
+  )
 })
 
 void loadWorkspace()
@@ -717,7 +767,7 @@ void loadWorkspace()
       cancel-text="Cancel"
       width="920px"
       :confirm-loading="mutating"
-      :ok-button-props="{ disabled: !selectedInfluencerRowKeys.length }"
+      :ok-button-props="{ disabled: addFromLibraryLoading || !selectedInfluencerRowKeys.length }"
       destroy-on-close
       @ok="submitAddFromLibrary"
     >
@@ -735,12 +785,16 @@ void loadWorkspace()
           placeholder="All platforms"
           :options="libraryPlatformOptions"
         />
+        <label class="archive-toggle">
+          <span>Only not added</span>
+          <a-switch v-model:checked="showOnlyAvailableInfluencers" />
+        </label>
       </div>
 
       <a-table
         :columns="influencerColumns"
-        :data-source="influencers"
-        :loading="influencersLoading"
+        :data-source="filteredInfluencers"
+        :loading="addFromLibraryLoading"
         :pagination="{ pageSize: 6 }"
         :row-key="(record: InfluencerListItem) => record.id"
         :row-selection="influencerRowSelection"
@@ -754,6 +808,9 @@ void loadWorkspace()
                 {{ record.display_name }}
               </RouterLink>
               <span v-if="record.full_name">{{ record.full_name }}</span>
+              <a-tag v-if="isInfluencerAlreadyInCampaign(record.id)" color="default">
+                Already in campaign
+              </a-tag>
             </div>
           </template>
 
