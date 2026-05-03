@@ -533,9 +533,6 @@ void loadDealDetail()
                 {{ formatDate(deal.updated_at) }}
               </a-descriptions-item>
             </a-descriptions>
-            <template #actions>
-              <a-button type="link" @click="openDealEdit">Edit deal</a-button>
-            </template>
           </a-card>
 
           <a-card>

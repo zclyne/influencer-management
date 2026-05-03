@@ -137,7 +137,7 @@ const columns: TableColumnsType<DealPipelineRow> = [
     title: 'Actions',
     key: 'actions',
     fixed: 'right',
-    width: 250,
+    width: 170,
   },
 ]
 
@@ -678,14 +678,6 @@ void loadWorkspace()
           <template v-else-if="column.key === 'actions'">
             <a-space>
               <a-button type="link" @click="selectDeal(record)">Quick review</a-button>
-              <RouterLink
-                :to="{
-                  name: 'dealDetail',
-                  params: { campaignId: record.campaign_id, dealId: record.id },
-                }"
-              >
-                <a-button type="link">Open deal</a-button>
-              </RouterLink>
               <a-popconfirm
                 v-if="!record.archived_at"
                 title="Delete this deal?"
