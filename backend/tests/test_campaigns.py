@@ -17,6 +17,7 @@ def test_campaign_crud_and_archive(api_client: TestClient, db_session: Session) 
             "start_date": "2026-05-01",
             "end_date": "2026-05-31",
             "notes": "Initial notes",
+            "tags": ["  launch  ", "Launch", "paid/approved"],
         },
     )
 
@@ -26,11 +27,12 @@ def test_campaign_crud_and_archive(api_client: TestClient, db_session: Session) 
     assert created["status"] == CampaignStatus.PLANNING.value
     assert created["budget"] == "1200.50"
     assert created["brands"] == []
+    assert created["tags"] == ["launch", "paid/approved"]
 
     campaign_id = created["id"]
     patch_response = api_client.patch(
         f"/api/v1/campaigns/{campaign_id}",
-        json={"status": "ACTIVE", "notes": "Updated"},
+        json={"status": "ACTIVE", "notes": "Updated", "tags": ["priority", "seasonal"]},
     )
 
     assert patch_response.status_code == 200
@@ -38,10 +40,22 @@ def test_campaign_crud_and_archive(api_client: TestClient, db_session: Session) 
     assert patched["status"] == CampaignStatus.ACTIVE.value
     assert patched["notes"] == "Updated"
     assert patched["brief"] == "Creator launch"
+    assert patched["tags"] == ["priority", "seasonal"]
 
     list_response = api_client.get("/api/v1/campaigns", params={"status": "ACTIVE"})
     assert list_response.status_code == 200
     assert [campaign["id"] for campaign in list_response.json()["campaigns"]] == [campaign_id]
+
+    tag_list_response = api_client.get("/api/v1/campaigns", params={"tag": " Seasonal "})
+    assert tag_list_response.status_code == 200
+    assert [campaign["id"] for campaign in tag_list_response.json()["campaigns"]] == [campaign_id]
+
+    invalid_tags_response = api_client.patch(
+        f"/api/v1/campaigns/{campaign_id}",
+        json={"tags": ["needs, comma"]},
+    )
+    assert invalid_tags_response.status_code == 422
+    assert invalid_tags_response.json()["code"] == "invalid_campaign"
 
     delete_response = api_client.delete(f"/api/v1/campaigns/{campaign_id}")
     assert delete_response.status_code == 204

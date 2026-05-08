@@ -162,6 +162,34 @@ def test_bulk_create_and_bulk_update_deals(
     assert refreshed.internal_notes == "Sent first email"
 
 
+def test_deal_tags_use_influencer_tag_validation(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    campaign_id, influencer_id = _seed_campaign_and_influencer(db_session)
+
+    create_response = api_client.post(
+        f"/api/v1/campaigns/{campaign_id}/deals",
+        json={
+            "influencer_id": influencer_id,
+            "labels": ["  priority creator  ", "Priority Creator", "paid/approved"],
+        },
+    )
+
+    assert create_response.status_code == 201
+    created = create_response.json()
+    assert created["labels"] == ["priority creator", "paid/approved"]
+
+    invalid_response = api_client.patch(
+        f"/api/v1/deals/{created['id']}",
+        json={"labels": ["needs, comma"]},
+    )
+
+    assert invalid_response.status_code == 422
+    assert invalid_response.json()["code"] == "invalid_deal"
+    assert invalid_response.json()["details"]["allowed_characters"]
+
+
 def test_deal_error_paths(api_client: TestClient, db_session: Session) -> None:
     campaign = CampaignRepository(db_session).create(name="Spring Launch")
     db_session.commit()

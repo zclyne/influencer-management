@@ -15,6 +15,7 @@ export interface CampaignCreateRequest {
   end_date?: string | null
   status?: CampaignStatus
   notes?: string | null
+  tags?: string[]
 }
 
 export interface CampaignUpdateRequest {
@@ -25,6 +26,7 @@ export interface CampaignUpdateRequest {
   end_date?: string | null
   status?: CampaignStatus | null
   notes?: string | null
+  tags?: string[] | null
 }
 
 export interface CampaignResponse {
@@ -36,6 +38,7 @@ export interface CampaignResponse {
   end_date?: string | null
   status: CampaignStatus
   notes?: string | null
+  tags: string[]
   created_at: string
   updated_at: string
   archived_at?: string | null

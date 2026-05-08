@@ -65,6 +65,7 @@ class Campaign(TimestampMixin, ArchiveMixin, Base):
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default=CampaignStatus.PLANNING.value)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags_json: Mapped[list[str] | None] = mapped_column(SAJSON, nullable=True)
 
     brand_links: Mapped[list["CampaignBrand"]] = relationship(
         back_populates="campaign", cascade="all, delete-orphan"

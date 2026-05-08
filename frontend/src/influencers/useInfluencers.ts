@@ -6,6 +6,7 @@ import {
   listInfluencers,
 } from '../api/client'
 import type { InfluencerListItem, ManualInfluencerInput } from '../api/types'
+import { normalizeTags } from '../shared/tags'
 
 export const platformOptions = [
   { label: 'Instagram', value: 'instagram' },
@@ -29,37 +30,7 @@ const normalizeQueryValue = (value: string) => {
   return trimmed || undefined
 }
 
-const maxInfluencerTags = 20
-const maxInfluencerTagLength = 32
-const influencerTagPattern = /^[\p{L}\p{N}_\s\-/.&]+$/u
-
-export const normalizeInfluencerTags = (tags: string[] = []) => {
-  const normalizedTags: string[] = []
-  const seen = new Set<string>()
-  for (const tag of tags) {
-    const normalized = tag.trim().replace(/\s+/g, ' ')
-    if (!normalized) {
-      throw new Error('Tags cannot be blank.')
-    }
-    if (normalized.length > maxInfluencerTagLength) {
-      throw new Error(`Tags must be ${maxInfluencerTagLength} characters or fewer.`)
-    }
-    if (!influencerTagPattern.test(normalized)) {
-      throw new Error('Tags can use letters, numbers, spaces, -, _, /, ., and &.')
-    }
-
-    const key = normalized.toLocaleLowerCase()
-    if (!seen.has(key)) {
-      seen.add(key)
-      normalizedTags.push(normalized)
-      if (normalizedTags.length > maxInfluencerTags) {
-        throw new Error(`Use ${maxInfluencerTags} tags or fewer.`)
-      }
-    }
-  }
-
-  return normalizedTags
-}
+export const normalizeInfluencerTags = normalizeTags
 
 export const useInfluencers = () => {
   const influencers = ref<InfluencerListItem[]>([])

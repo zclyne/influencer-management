@@ -32,6 +32,7 @@ from app.schemas.deals import (
     PrimaryContactSummary,
     PrimaryPlatformSummary,
 )
+from app.services.tags import TagValidationError, clean_tags
 
 
 class DealServiceError(Exception):
@@ -62,6 +63,11 @@ class InfluencerNotFound(DealServiceError):
 class DealConflict(DealServiceError):
     code = "deal_conflict"
     status_code = 409
+
+
+class DealValidationError(DealServiceError):
+    code = "invalid_deal"
+    status_code = 422
 
 
 class DealService:
@@ -374,14 +380,10 @@ class DealService:
 
 
 def _clean_labels(labels: list[str]) -> list[str]:
-    cleaned: list[str] = []
-    seen: set[str] = set()
-    for label in labels:
-        normalized = label.strip()
-        if normalized and normalized not in seen:
-            cleaned.append(normalized)
-            seen.add(normalized)
-    return cleaned
+    try:
+        return clean_tags(labels, entity_name="Deal")
+    except TagValidationError as exc:
+        raise DealValidationError(exc.message, details=exc.details) from exc
 
 
 def _apply_label_update(

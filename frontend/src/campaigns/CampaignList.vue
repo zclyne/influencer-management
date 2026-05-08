@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
 import type { CampaignCreateRequest, CampaignResponse, CampaignStatus } from '../api/types'
+import { normalizeTags } from '../shared/tags'
 import { campaignStatusLabels, campaignStatuses, useCampaigns } from './useCampaigns'
 
 interface CampaignCreateForm {
@@ -13,6 +14,7 @@ interface CampaignCreateForm {
   endDate: string | null
   brief: string
   notes: string
+  tags: string[]
 }
 
 const router = useRouter()
@@ -26,6 +28,7 @@ const createForm = reactive<CampaignCreateForm>({
   endDate: null,
   brief: '',
   notes: '',
+  tags: [],
 })
 
 const {
@@ -36,12 +39,14 @@ const {
   error,
   searchText,
   statusFilter,
+  tagFilter,
   includeArchived,
   selectedRowKeys,
   activeCampaignCount,
   planningCampaignCount,
   liveCampaignCount,
   archivedCampaignCount,
+  tagOptions,
   loadCampaigns,
   createNewCampaign,
   archiveCampaign,
@@ -59,6 +64,11 @@ const columns: TableColumnsType<CampaignResponse> = [
     title: 'Brands',
     key: 'brands',
     width: 240,
+  },
+  {
+    title: 'Tags',
+    key: 'tags',
+    width: 220,
   },
   {
     title: 'Status',
@@ -147,18 +157,23 @@ const resetCreateForm = () => {
   createForm.endDate = null
   createForm.brief = ''
   createForm.notes = ''
+  createForm.tags = []
   formRef.value?.clearValidate()
 }
 
-const buildCreatePayload = (): CampaignCreateRequest => ({
-  name: createForm.name.trim(),
-  status: createForm.status,
-  budget: createForm.budget,
-  start_date: createForm.startDate,
-  end_date: createForm.endDate,
-  brief: createForm.brief.trim() || null,
-  notes: createForm.notes.trim() || null,
-})
+const buildCreatePayload = (): CampaignCreateRequest => {
+  const tags = normalizeTags(createForm.tags)
+  return {
+    name: createForm.name.trim(),
+    status: createForm.status,
+    budget: createForm.budget,
+    start_date: createForm.startDate,
+    end_date: createForm.endDate,
+    brief: createForm.brief.trim() || null,
+    notes: createForm.notes.trim() || null,
+    tags,
+  }
+}
 
 const openCreateModal = () => {
   createModalOpen.value = true
@@ -173,8 +188,10 @@ const submitCreate = async () => {
     createModalOpen.value = false
     resetCreateForm()
     await router.push({ name: 'campaignWorkspace', params: { campaignId: created.id } })
-  } catch {
-    message.error('Campaign could not be created.')
+  } catch (createError) {
+    message.error(
+      createError instanceof Error ? createError.message : 'Campaign could not be created.',
+    )
   }
 }
 
@@ -263,6 +280,13 @@ void loadCampaigns()
             placeholder="All statuses"
             :options="statusOptions"
           />
+          <a-select
+            v-model:value="tagFilter"
+            class="tag-filter"
+            allow-clear
+            placeholder="All tags"
+            :options="tagOptions"
+          />
           <label class="archive-toggle">
             <span>Include deleted</span>
             <a-switch v-model:checked="includeArchived" />
@@ -288,7 +312,7 @@ void loadCampaigns()
         :pagination="{ pageSize: 10, showSizeChanger: true }"
         :row-key="(record: CampaignResponse) => record.id"
         :row-selection="rowSelection"
-        :scroll="{ x: 1080 }"
+        :scroll="{ x: 1300 }"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'campaign'">
@@ -305,6 +329,13 @@ void loadCampaigns()
               <a-tag v-for="link in record.brands" :key="link.id">{{ link.brand.name }}</a-tag>
             </div>
             <span v-else class="muted">No brands</span>
+          </template>
+
+          <template v-else-if="column.key === 'tags'">
+            <div v-if="record.tags.length" class="tag-row">
+              <a-tag v-for="tag in record.tags" :key="tag">{{ tag }}</a-tag>
+            </div>
+            <span v-else class="muted">No tags</span>
           </template>
 
           <template v-else-if="column.key === 'status'">
@@ -395,6 +426,18 @@ void loadCampaigns()
 
         <a-form-item label="Notes" name="notes">
           <a-textarea v-model:value="createForm.notes" :rows="3" />
+        </a-form-item>
+
+        <a-form-item label="Tags" name="tags">
+          <a-select
+            v-model:value="createForm.tags"
+            mode="tags"
+            placeholder="Add campaign tags"
+            :max-tag-count="8"
+          />
+          <p class="form-help">
+            Use up to 20 tags. Tags support letters, numbers, spaces, -, _, /, ., and &.
+          </p>
         </a-form-item>
       </a-form>
     </a-modal>
@@ -500,7 +543,8 @@ h1 {
   width: min(300px, 100%);
 }
 
-.status-filter {
+.status-filter,
+.tag-filter {
   width: 160px;
 }
 
@@ -546,6 +590,13 @@ h1 {
   width: 100%;
 }
 
+.form-help {
+  margin: 6px 0 0;
+  color: #697582;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 @media (max-width: 900px) {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -563,6 +614,7 @@ h1 {
 
   .search-input,
   .status-filter,
+  .tag-filter,
   .archive-toggle,
   .table-toolbar-actions,
   .table-toolbar-actions button {

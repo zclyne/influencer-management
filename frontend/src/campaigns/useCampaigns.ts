@@ -1,5 +1,10 @@
 import { computed, ref, watch } from 'vue'
-import { archiveCampaign as archiveCampaignRequest, createCampaign, errorMessage, listCampaigns } from '../api/client'
+import {
+  archiveCampaign as archiveCampaignRequest,
+  createCampaign,
+  errorMessage,
+  listCampaigns,
+} from '../api/client'
 import type { CampaignCreateRequest, CampaignResponse, CampaignStatus } from '../api/types'
 
 export const campaignStatuses: CampaignStatus[] = ['PLANNING', 'ACTIVE', 'EVALUATING', 'CLOSED']
@@ -19,6 +24,7 @@ export const useCampaigns = () => {
   const error = ref<string | null>(null)
   const searchText = ref('')
   const statusFilter = ref<CampaignStatus | undefined>()
+  const tagFilter = ref<string | undefined>()
   const includeArchived = ref(false)
   const selectedRowKeys = ref<string[]>([])
 
@@ -29,6 +35,7 @@ export const useCampaigns = () => {
     try {
       const response = await listCampaigns({
         status: statusFilter.value,
+        tag: tagFilter.value,
         includeArchived: includeArchived.value,
       })
       campaigns.value = response.campaigns
@@ -45,7 +52,10 @@ export const useCampaigns = () => {
 
     return campaigns.value.filter((campaign) => {
       const brandNames = campaign.brands.map((link) => link.brand.name).join(' ')
-      return `${campaign.name} ${brandNames} ${campaign.status}`.toLowerCase().includes(query)
+      const tags = campaign.tags.join(' ')
+      return `${campaign.name} ${brandNames} ${tags} ${campaign.status}`
+        .toLowerCase()
+        .includes(query)
     })
   })
 
@@ -68,6 +78,13 @@ export const useCampaigns = () => {
 
   const archivedCampaignCount = computed(
     () => campaigns.value.filter((campaign) => campaign.archived_at).length,
+  )
+
+  const tagOptions = computed(() =>
+    Array.from(new Set(campaigns.value.flatMap((campaign) => campaign.tags))).map((tag) => ({
+      label: tag,
+      value: tag,
+    })),
   )
 
   const createNewCampaign = async (payload: CampaignCreateRequest) => {
@@ -120,7 +137,9 @@ export const useCampaigns = () => {
         error.value = `${failed} campaign(s) could not be deleted.`
       }
 
-      selectedRowKeys.value = campaignIds.filter((_, index) => results[index]?.status === 'rejected')
+      selectedRowKeys.value = campaignIds.filter(
+        (_, index) => results[index]?.status === 'rejected',
+      )
       await loadCampaigns()
       return { archived, failed }
     } finally {
@@ -128,7 +147,7 @@ export const useCampaigns = () => {
     }
   }
 
-  watch([statusFilter, includeArchived], () => {
+  watch([statusFilter, tagFilter, includeArchived], () => {
     selectedRowKeys.value = []
     void loadCampaigns()
   })
@@ -147,12 +166,14 @@ export const useCampaigns = () => {
     error,
     searchText,
     statusFilter,
+    tagFilter,
     includeArchived,
     selectedRowKeys,
     activeCampaignCount,
     planningCampaignCount,
     liveCampaignCount,
     archivedCampaignCount,
+    tagOptions,
     loadCampaigns,
     createNewCampaign,
     archiveCampaign,

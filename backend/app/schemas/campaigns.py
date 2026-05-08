@@ -14,6 +14,7 @@ class CampaignCreateRequest(BaseModel):
     end_date: date | None = None
     status: CampaignStatus = CampaignStatus.PLANNING
     notes: str | None = None
+    tags: list[str] = Field(default_factory=list)
 
     @field_validator("name")
     @classmethod
@@ -32,6 +33,7 @@ class CampaignUpdateRequest(BaseModel):
     end_date: date | None = None
     status: CampaignStatus | None = None
     notes: str | None = None
+    tags: list[str] | None = None
 
     @field_validator("name")
     @classmethod
@@ -80,6 +82,7 @@ class CampaignResponse(BaseModel):
     end_date: date | None = None
     status: CampaignStatus
     notes: str | None = None
+    tags: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
     archived_at: datetime | None = None

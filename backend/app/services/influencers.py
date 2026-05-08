@@ -1,5 +1,3 @@
-import re
-
 from sqlalchemy.orm import Session
 
 from app.db import models
@@ -45,10 +43,7 @@ from app.services.influencer_bulk_writer import (
     BulkInfluencerWriteResult,
     InfluencerBulkWriter,
 )
-
-MAX_INFLUENCER_TAGS = 20
-MAX_INFLUENCER_TAG_LENGTH = 32
-INFLUENCER_TAG_PATTERN = re.compile(r"^[\w\s\-/.&]+$", re.UNICODE)
+from app.services.tags import TagValidationError, clean_tag_value, clean_tags
 
 
 class InfluencerServiceError(ServiceError):
@@ -362,43 +357,16 @@ class InfluencerService:
         return self._clean_tag(normalized)
 
     def _clean_tags(self, tags: list[str] | None) -> list[str]:
-        if not tags:
-            return []
-
-        cleaned: list[str] = []
-        seen: set[str] = set()
-        for tag in tags:
-            clean_tag = self._clean_tag(tag)
-            key = clean_tag.casefold()
-            if key in seen:
-                continue
-            seen.add(key)
-            cleaned.append(clean_tag)
-            if len(cleaned) > MAX_INFLUENCER_TAGS:
-                raise InfluencerValidationError(
-                    "Influencer can have at most 20 tags.",
-                    details={"max_tags": MAX_INFLUENCER_TAGS},
-                )
-        return cleaned
+        try:
+            return clean_tags(tags, entity_name="Influencer")
+        except TagValidationError as exc:
+            raise InfluencerValidationError(exc.message, details=exc.details) from exc
 
     def _clean_tag(self, tag: str) -> str:
-        cleaned = " ".join(tag.strip().split())
-        if not cleaned:
-            raise InfluencerValidationError("Influencer tag cannot be blank.")
-        if len(cleaned) > MAX_INFLUENCER_TAG_LENGTH:
-            raise InfluencerValidationError(
-                "Influencer tag is too long.",
-                details={"tag": cleaned, "max_length": MAX_INFLUENCER_TAG_LENGTH},
-            )
-        if not INFLUENCER_TAG_PATTERN.fullmatch(cleaned):
-            raise InfluencerValidationError(
-                "Influencer tag contains unsupported characters.",
-                details={
-                    "tag": cleaned,
-                    "allowed_characters": "letters, numbers, spaces, -, _, /, ., &",
-                },
-            )
-        return cleaned
+        try:
+            return clean_tag_value(tag, entity_name="Influencer")
+        except TagValidationError as exc:
+            raise InfluencerValidationError(exc.message, details=exc.details) from exc
 
     def _tags(self, influencer: models.Influencer) -> list[str]:
         return list(influencer.tags_json or [])

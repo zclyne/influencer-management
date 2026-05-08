@@ -16,6 +16,7 @@ import {
   platformOptions as libraryPlatformOptions,
   useInfluencers,
 } from '../influencers/useInfluencers'
+import { normalizeTags } from '../shared/tags'
 import {
   dealStatuses,
   dealStatusLabels,
@@ -33,6 +34,10 @@ interface CampaignEditForm {
   notes: string
 }
 
+interface TagsForm {
+  tags: string[]
+}
+
 const route = useRoute()
 const router = useRouter()
 const campaignId = computed(() => String(route.params.campaignId ?? ''))
@@ -41,6 +46,7 @@ const addFromLibraryOpen = ref(false)
 const addFromLibraryMembershipLoading = ref(false)
 const showOnlyAvailableInfluencers = ref(true)
 const campaignEditOpen = ref(false)
+const tagsModalOpen = ref(false)
 const bulkStatus = ref<DealStatus | undefined>()
 
 const campaignForm = reactive<CampaignEditForm>({
@@ -51,6 +57,10 @@ const campaignForm = reactive<CampaignEditForm>({
   endDate: null,
   brief: '',
   notes: '',
+})
+
+const tagsForm = reactive<TagsForm>({
+  tags: [],
 })
 
 const {
@@ -305,6 +315,10 @@ const resetCampaignForm = () => {
   campaignFormRef.value?.clearValidate()
 }
 
+const resetTagsForm = () => {
+  tagsForm.tags = [...(campaign.value?.tags ?? [])]
+}
+
 const buildCampaignPayload = (): CampaignUpdateRequest => ({
   name: campaignForm.name.trim(),
   status: campaignForm.status,
@@ -320,6 +334,11 @@ const openCampaignEdit = () => {
   campaignEditOpen.value = true
 }
 
+const openTagsEdit = () => {
+  resetTagsForm()
+  tagsModalOpen.value = true
+}
+
 const submitCampaignEdit = async () => {
   await campaignFormRef.value?.validate()
 
@@ -329,6 +348,17 @@ const submitCampaignEdit = async () => {
     campaignEditOpen.value = false
   } catch {
     message.error('Campaign could not be updated.')
+  }
+}
+
+const submitTags = async () => {
+  try {
+    const tags = normalizeTags(tagsForm.tags)
+    await updateCampaignProfile({ tags })
+    message.success('Tags updated.')
+    tagsModalOpen.value = false
+  } catch (tagError) {
+    message.error(tagError instanceof Error ? tagError.message : 'Tags could not be saved.')
   }
 }
 
@@ -534,6 +564,17 @@ void loadWorkspace()
     <a-card v-if="campaign" class="campaign-brief-card" size="small">
       <template #title>Brief</template>
       <p>{{ campaign.brief || 'No brief yet.' }}</p>
+    </a-card>
+
+    <a-card v-if="campaign" class="campaign-tags-card" size="small">
+      <template #title>Tags</template>
+      <template #extra>
+        <a-button :disabled="Boolean(campaign.archived_at)" @click="openTagsEdit">Edit</a-button>
+      </template>
+      <div v-if="campaign.tags.length" class="tag-row">
+        <a-tag v-for="tag in campaign.tags" :key="tag">{{ tag }}</a-tag>
+      </div>
+      <span v-else class="muted">No tags</span>
     </a-card>
 
     <div class="summary-grid">
@@ -753,6 +794,30 @@ void loadWorkspace()
     </a-modal>
 
     <a-modal
+      v-model:open="tagsModalOpen"
+      title="Edit tags"
+      ok-text="Save"
+      cancel-text="Cancel"
+      :confirm-loading="mutating"
+      destroy-on-close
+      @ok="submitTags"
+    >
+      <a-form :model="tagsForm" layout="vertical">
+        <a-form-item label="Tags" name="tags">
+          <a-select
+            v-model:value="tagsForm.tags"
+            mode="tags"
+            placeholder="Add campaign tags"
+            :max-tag-count="8"
+          />
+          <p class="form-help">
+            Use up to 20 tags. Tags support letters, numbers, spaces, -, _, /, ., and &.
+          </p>
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal
       v-model:open="addFromLibraryOpen"
       title="Add influencers from library"
       ok-text="Add to campaign"
@@ -917,6 +982,10 @@ h1 {
   white-space: pre-wrap;
 }
 
+.campaign-tags-card :deep(.ant-card-body) {
+  min-width: 0;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(160px, 1fr));
@@ -1054,6 +1123,13 @@ h1 {
 
 .full-width {
   width: 100%;
+}
+
+.form-help {
+  margin: 6px 0 0;
+  color: #697582;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 @media (max-width: 980px) {

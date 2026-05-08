@@ -13,13 +13,17 @@ import type {
 } from '../api/types'
 import { dealStatuses, dealStatusLabels } from '../campaigns/useCampaignWorkspace'
 import { platformColor } from '../influencers/useInfluencers'
+import { normalizeTags } from '../shared/tags'
 import { useDealDetail } from './useDealDetail'
 
 interface DealEditForm {
   status: DealStatus
   lostReason: string
-  labels: string
   internalNotes: string
+}
+
+interface TagsForm {
+  tags: string[]
 }
 
 interface DeliverableForm {
@@ -51,6 +55,7 @@ const deliverableFormRef = ref<FormInstance>()
 const compensationFormRef = ref<FormInstance>()
 
 const editDealOpen = ref(false)
+const tagsModalOpen = ref(false)
 const deliverableModalOpen = ref(false)
 const compensationModalOpen = ref(false)
 const editingDeliverable = ref<DeliverableResponse | null>(null)
@@ -79,8 +84,11 @@ const {
 const dealForm = reactive<DealEditForm>({
   status: 'DRAFT',
   lostReason: '',
-  labels: '',
   internalNotes: '',
+})
+
+const tagsForm = reactive<TagsForm>({
+  tags: [],
 })
 
 const deliverableForm = reactive<DeliverableForm>({
@@ -266,12 +274,19 @@ const nextActionLabel = computed(() => {
   return 'Review deal'
 })
 
+const lostReasonInputEnabled = computed(
+  () => deal.value?.status === 'LOST' || dealForm.status === 'LOST',
+)
+
 const resetDealForm = () => {
   dealForm.status = deal.value?.status ?? 'DRAFT'
   dealForm.lostReason = deal.value?.lost_reason ?? ''
-  dealForm.labels = deal.value?.labels.join(', ') ?? ''
   dealForm.internalNotes = deal.value?.internal_notes ?? ''
   dealFormRef.value?.clearValidate()
+}
+
+const resetTagsForm = () => {
+  tagsForm.tags = [...(deal.value?.labels ?? [])]
 }
 
 const resetDeliverableForm = () => {
@@ -299,6 +314,11 @@ const resetCompensationForm = () => {
 const openDealEdit = () => {
   resetDealForm()
   editDealOpen.value = true
+}
+
+const openTagsEdit = () => {
+  resetTagsForm()
+  tagsModalOpen.value = true
 }
 
 const openCreateDeliverable = () => {
@@ -337,26 +357,30 @@ const openEditCompensation = (item: CompensationItemResponse) => {
   compensationModalOpen.value = true
 }
 
-const parseLabels = () =>
-  dealForm.labels
-    .split(',')
-    .map((label) => label.trim())
-    .filter(Boolean)
-
 const submitDealEdit = async () => {
   await dealFormRef.value?.validate()
 
   try {
     await updateDealDetail({
       status: dealForm.status,
-      lost_reason: dealForm.lostReason.trim() || null,
-      labels: parseLabels(),
+      lost_reason: lostReasonInputEnabled.value ? dealForm.lostReason.trim() || null : null,
       internal_notes: dealForm.internalNotes.trim() || null,
     })
     message.success('Deal updated.')
     editDealOpen.value = false
   } catch {
     message.error('Deal could not be updated.')
+  }
+}
+
+const submitTags = async () => {
+  try {
+    const tags = normalizeTags(tagsForm.tags)
+    await updateDealDetail({ labels: tags })
+    message.success('Tags updated.')
+    tagsModalOpen.value = false
+  } catch (tagError) {
+    message.error(tagError instanceof Error ? tagError.message : 'Tags could not be saved.')
   }
 }
 
@@ -517,12 +541,6 @@ void loadDealDetail()
               <a-descriptions-item label="Lost reason">
                 {{ deal.lost_reason || 'Not set' }}
               </a-descriptions-item>
-              <a-descriptions-item label="Labels">
-                <div v-if="deal.labels.length" class="tag-row">
-                  <a-tag v-for="label in deal.labels" :key="label">{{ label }}</a-tag>
-                </div>
-                <span v-else class="muted">No labels</span>
-              </a-descriptions-item>
               <a-descriptions-item label="Next action">
                 {{ nextActionLabel }}
               </a-descriptions-item>
@@ -554,6 +572,17 @@ void loadDealDetail()
         </div>
 
         <div class="detail-grid">
+          <a-card class="section-card">
+            <template #title>Tags</template>
+            <template #extra>
+              <a-button @click="openTagsEdit">Edit</a-button>
+            </template>
+            <div v-if="deal.labels.length" class="tag-row">
+              <a-tag v-for="tag in deal.labels" :key="tag">{{ tag }}</a-tag>
+            </div>
+            <span v-else class="muted">No tags</span>
+          </a-card>
+
           <a-card class="section-card">
             <template #title>Deliverables</template>
             <template #extra>
@@ -689,14 +718,35 @@ void loadDealDetail()
         <a-form-item label="Status" name="status">
           <a-select v-model:value="dealForm.status" :options="statusOptions" />
         </a-form-item>
-        <a-form-item label="Lost reason" name="lostReason">
-          <a-input v-model:value="dealForm.lostReason" placeholder="Only needed for lost deals" />
-        </a-form-item>
-        <a-form-item label="Labels" name="labels">
-          <a-input v-model:value="dealForm.labels" placeholder="priority, paid" />
+        <a-form-item v-if="lostReasonInputEnabled" label="Lost reason" name="lostReason">
+          <a-input
+            v-model:value="dealForm.lostReason"
+          />
         </a-form-item>
         <a-form-item label="Internal notes" name="internalNotes">
           <a-textarea v-model:value="dealForm.internalNotes" :rows="4" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal
+      v-model:open="tagsModalOpen"
+      title="Edit tags"
+      ok-text="Save"
+      cancel-text="Cancel"
+      :confirm-loading="mutating"
+      destroy-on-close
+      @ok="submitTags"
+    >
+      <a-form :model="tagsForm" layout="vertical">
+        <a-form-item label="Tags" name="tags">
+          <a-select
+            v-model:value="tagsForm.tags"
+            mode="tags"
+            placeholder="Add deal tags"
+            :max-tag-count="8"
+          />
+          <p class="form-help">Use up to 20 tags. Tags support letters, numbers, spaces, -, _, /, ., and &.</p>
         </a-form-item>
       </a-form>
     </a-modal>
@@ -916,6 +966,13 @@ h2 {
 .cell-note {
   margin-top: 4px;
   font-size: 12px;
+}
+
+.form-help {
+  margin: 6px 0 0;
+  color: #697582;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .form-grid {

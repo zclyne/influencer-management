@@ -126,10 +126,13 @@ export const apiRequest = async <T>(path: string, init: RequestInit = {}): Promi
   return (await response.json()) as T
 }
 
-export const listCampaigns = (options: { status?: CampaignStatus; includeArchived?: boolean } = {}) =>
+export const listCampaigns = (
+  options: { status?: CampaignStatus; tag?: string; includeArchived?: boolean } = {},
+) =>
   apiRequest<CampaignListResponse>(
     `/campaigns${toQueryString({
       status: options.status,
+      tag: options.tag,
       include_archived: options.includeArchived,
     })}`,
   )

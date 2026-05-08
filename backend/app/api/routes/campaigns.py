@@ -41,11 +41,13 @@ def create_campaign(
 def list_campaigns(
     db: Annotated[Session, Depends(get_db)],
     status: CampaignStatus | None = None,
+    tag: str | None = None,
     include_archived: bool = False,
 ) -> CampaignListResponse | JSONResponse:
     try:
         return CampaignService(db).list_campaigns(
             status=status,
+            tag=tag,
             include_archived=include_archived,
         )
     except CampaignServiceError as exc:

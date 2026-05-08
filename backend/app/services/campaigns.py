@@ -15,6 +15,7 @@ from app.schemas.campaigns import (
     CampaignUpdateRequest,
 )
 from app.services.errors import ServiceError
+from app.services.tags import TagValidationError, clean_tag_value, clean_tags
 
 
 class CampaignServiceError(ServiceError):
@@ -30,6 +31,11 @@ class CampaignNotFound(CampaignServiceError):
 class CampaignBrandConflict(CampaignServiceError):
     code = "campaign_brand_conflict"
     status_code = 409
+
+
+class CampaignValidationError(CampaignServiceError):
+    code = "invalid_campaign"
+    status_code = 422
 
 
 class BrandNotFound(CampaignServiceError):
@@ -53,6 +59,7 @@ class CampaignService:
             end_date=payload.end_date,
             status=payload.status.value,
             notes=payload.notes,
+            tags_json=self._clean_tags(payload.tags) or None,
         )
         self.db.commit()
         return self._campaign_response(campaign)
@@ -61,12 +68,21 @@ class CampaignService:
         self,
         *,
         status: CampaignStatus | None = None,
+        tag: str | None = None,
         include_archived: bool = False,
     ) -> CampaignListResponse:
         campaigns = self.campaigns.list(
             status=status.value if status else None,
             include_archived=include_archived,
         )
+        normalized_tag = self._normalize_tag_filter(tag)
+        if normalized_tag:
+            normalized_key = normalized_tag.casefold()
+            campaigns = [
+                campaign
+                for campaign in campaigns
+                if normalized_key in {tag.casefold() for tag in self._tags(campaign)}
+            ]
         return CampaignListResponse(
             campaigns=[self._campaign_response(campaign) for campaign in campaigns]
         )
@@ -179,7 +195,32 @@ class CampaignService:
         status = values.get("status")
         if isinstance(status, CampaignStatus):
             values["status"] = status.value
+        if "tags" in values:
+            values["tags_json"] = self._clean_tags(values.pop("tags")) or None
         return values
+
+    def _normalize_tag_filter(self, tag: str | None) -> str | None:
+        if tag is None:
+            return None
+        normalized = " ".join(tag.strip().split())
+        if not normalized:
+            return None
+        return self._clean_tag(normalized)
+
+    def _clean_tags(self, tags: list[str] | None) -> list[str]:
+        try:
+            return clean_tags(tags, entity_name="Campaign")
+        except TagValidationError as exc:
+            raise CampaignValidationError(exc.message, details=exc.details) from exc
+
+    def _clean_tag(self, tag: str) -> str:
+        try:
+            return clean_tag_value(tag, entity_name="Campaign")
+        except TagValidationError as exc:
+            raise CampaignValidationError(exc.message, details=exc.details) from exc
+
+    def _tags(self, campaign: models.Campaign) -> list[str]:
+        return list(campaign.tags_json or [])
 
     def _campaign_response(self, campaign: models.Campaign) -> CampaignResponse:
         brand_links = sorted(
@@ -195,6 +236,7 @@ class CampaignService:
             end_date=campaign.end_date,
             status=CampaignStatus(campaign.status),
             notes=campaign.notes,
+            tags=self._tags(campaign),
             created_at=campaign.created_at,
             updated_at=campaign.updated_at,
             archived_at=campaign.archived_at,
