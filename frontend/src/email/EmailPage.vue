@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -71,6 +71,7 @@ const selectedDealId = ref<string | undefined>(route.query.dealId as string | un
 const selectedLabel = ref<string | undefined>()
 const selectedThreadIds = ref<string[]>([])
 const expandedQuotedMessageIds = ref<Set<string>>(new Set())
+const messageFrameHeights = ref<Record<string, number>>({})
 const query = ref('')
 const loading = ref(false)
 const detailLoading = ref(false)
@@ -143,6 +144,8 @@ const allVisibleSelected = computed(
   () => threads.value.length > 0 && selectedVisibleCount.value === threads.value.length,
 )
 const hasSelectedThreads = computed(() => selectedThreadIds.value.length > 0)
+const maxMessageFrameHeight = 520
+const minMessageFrameHeight = 72
 
 const loadAuthStatus = async () => {
   authStatus.value = await getEmailAuthStatus()
@@ -335,6 +338,7 @@ const openThread = async (
   try {
     selectedThread.value = await getEmailThread(threadId, { markRead })
     expandedQuotedMessageIds.value = new Set()
+    messageFrameHeights.value = {}
     threads.value = threads.value.map((thread) =>
       thread.id === threadId ? { ...thread, unread: selectedThread.value?.unread ?? false } : thread,
     )
@@ -528,6 +532,8 @@ const toggleQuotedText = (messageId: string) => {
     next.add(messageId)
   }
   expandedQuotedMessageIds.value = next
+  delete messageFrameHeights.value[messageId]
+  void nextTick(() => resizeMessageFrame(messageId))
 }
 
 const displayMessageHtml = (mail: GmailMessageResponse) => {
@@ -544,6 +550,36 @@ const hasQuotedContent = (mail: GmailMessageResponse) => {
   if (mail.body_html && strippedHtmlBody(mail.body_html).stripped) return true
   if (mail.body_text && strippedTextBody(mail.body_text).stripped) return true
   return false
+}
+
+const resizeMessageFrame = (messageId: string, event?: Event) => {
+  const frame =
+    event?.currentTarget instanceof HTMLIFrameElement
+      ? event.currentTarget
+      : document.querySelector<HTMLIFrameElement>(`iframe[data-message-id="${CSS.escape(messageId)}"]`)
+  const frameDocument = frame?.contentDocument
+  if (!frameDocument) return
+
+  requestAnimationFrame(() => {
+    const body = frameDocument.body
+    const html = frameDocument.documentElement
+    const contentHeight = Math.max(
+      body?.scrollHeight ?? 0,
+      body?.offsetHeight ?? 0,
+      body?.clientHeight ?? 0,
+      html?.scrollHeight ?? 0,
+      html?.offsetHeight ?? 0,
+      html?.clientHeight ?? 0,
+    )
+    const nextHeight = Math.min(
+      maxMessageFrameHeight,
+      Math.max(minMessageFrameHeight, contentHeight + 2),
+    )
+    messageFrameHeights.value = {
+      ...messageFrameHeights.value,
+      [messageId]: nextHeight,
+    }
+  })
 }
 
 const emailReaderCss = `
@@ -874,9 +910,12 @@ onMounted(async () => {
                   </header>
                   <iframe
                     v-if="mail.body_html"
-                    sandbox="allow-popups allow-popups-to-escape-sandbox"
+                    sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                     class="html-frame"
+                    :data-message-id="mail.id"
+                    :style="{ height: `${messageFrameHeights[mail.id] ?? minMessageFrameHeight}px` }"
                     :srcdoc="emailHtmlSrcdoc(displayMessageHtml(mail))"
+                    @load="resizeMessageFrame(mail.id, $event)"
                   />
                   <pre v-else-if="mail.body_text">{{ displayMessageText(mail) }}</pre>
                   <p v-else class="muted">{{ mail.snippet || 'No readable message body.' }}</p>
@@ -1349,7 +1388,7 @@ onMounted(async () => {
 
 .html-frame {
   width: 100%;
-  height: 520px;
+  max-height: 520px;
   border: 1px solid #edf0f3;
   border-radius: 8px;
   background: #ffffff;
