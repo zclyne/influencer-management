@@ -560,14 +560,14 @@ void loadDealDetail()
           <a-card>
             <template #title>Deal summary</template>
             <a-descriptions size="small" :column="1">
-              <a-descriptions-item label="Status">
-                {{ statusLabel(deal.status) }}
+              <a-descriptions-item v-if="deal.status === 'LOST'" label="Status">
+                <div class="status-summary">
+                  <a-tag :color="statusColor(deal.status)">{{ statusLabel(deal.status) }}</a-tag>
+                  <span class="status-reason">{{ deal.lost_reason || 'Reason not recorded' }}</span>
+                </div>
               </a-descriptions-item>
               <a-descriptions-item label="Campaign">
                 {{ campaignName }}
-              </a-descriptions-item>
-              <a-descriptions-item label="Lost reason">
-                {{ deal.lost_reason || 'Not set' }}
               </a-descriptions-item>
               <a-descriptions-item label="Next action">
                 {{ nextActionLabel }}
@@ -928,6 +928,21 @@ h2 {
 .influencer-card {
   display: grid;
   gap: 12px;
+}
+
+.status-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.status-summary :deep(.ant-tag) {
+  margin-inline-end: 0;
+}
+
+.status-reason {
+  color: #58636f;
 }
 
 .influencer-card p,
