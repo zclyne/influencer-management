@@ -3,7 +3,7 @@
 ## Summary
 
 Implemented Email as a Gmail-backed read/link module. Gmail remains the source of truth for
-threads, messages, and CRM mapping. Desktop IRM stores only one local Gmail OAuth credential
+threads, messages, and CRM mapping. CreatorFlow stores only one local Gmail OAuth credential
 secret and uses Gmail labels to map threads to Campaigns and Deals.
 
 ## Backend

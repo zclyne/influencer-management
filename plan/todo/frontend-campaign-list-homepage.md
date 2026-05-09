@@ -8,7 +8,7 @@
 
 ## Design Sources
 
-- Product source of truth: Notion Desktop IRM docs.
+- Product source of truth: Notion CreatorFlow docs.
 - Frontend constraints: `frontend/AGENTS.md`.
 - Visual direction: Penpot `Campaign List Page`.
 - Current backend API:

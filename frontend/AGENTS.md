@@ -4,7 +4,7 @@
 
 These instructions apply to the `frontend/` workspace.
 
-The frontend is the desktop workbench UI for Desktop IRM. It should follow the product
+The frontend is the desktop workbench UI for CreatorFlow. It should follow the product
 boundaries in the root `AGENTS.md` and the current Penpot design direction.
 
 ## Technology Choices
@@ -176,7 +176,7 @@ Email:
 - `campaignId` plus `dealId` filters to the deal Gmail label.
 - Thread detail fetches live from Gmail; do not store message bodies in frontend state beyond the
   active page session.
-- Link/unlink actions should call backend Email APIs that apply or remove Desktop IRM Gmail labels.
+- Link/unlink actions should call backend Email APIs that apply or remove CreatorFlow Gmail labels.
 - Do not build send/reply/archive/mark-read behavior until the Email module explicitly expands.
 
 Templates:

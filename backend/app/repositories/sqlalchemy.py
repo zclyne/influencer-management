@@ -114,6 +114,11 @@ class CampaignRepository(SqlAlchemyRepository[models.Campaign]):
             .where(models.Campaign.id == campaign_id)
         )
 
+    def find_by_name(self, name: str) -> models.Campaign | None:
+        return self.db.scalar(
+            select(models.Campaign).where(func.lower(models.Campaign.name) == name.strip().lower())
+        )
+
 
 class CampaignBrandRepository(SqlAlchemyRepository[models.CampaignBrand]):
     model = models.CampaignBrand

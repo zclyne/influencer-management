@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_env: str = Field(default="local", alias="APP_ENV")
-    database_url: str = Field(default="sqlite:///../.data/desktop_irm.db", alias="DATABASE_URL")
+    database_url: str = Field(default="sqlite:///../.data/creatorflow.db", alias="DATABASE_URL")
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     local_storage_dir: Path = Field(default=Path("../.data/storage"), alias="LOCAL_STORAGE_DIR")
     local_secret_dir: Path = Field(default=Path("../.data/secrets"), alias="LOCAL_SECRET_DIR")

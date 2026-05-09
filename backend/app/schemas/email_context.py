@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -36,13 +37,16 @@ class EmailCrmLink(BaseModel):
     label_id: str
     label_name: str
     campaign_id: str | None = None
+    campaign_name: str | None = None
     deal_id: str | None = None
+    deal_influencer_name: str | None = None
 
 
 class GmailThreadSummary(BaseModel):
     id: str
     subject: str | None = None
     snippet: str | None = None
+    unread: bool = False
     participants: list[EmailParticipant] = Field(default_factory=list)
     last_message_at: datetime | None = None
     message_count: int = 0
@@ -53,6 +57,7 @@ class GmailThreadSummary(BaseModel):
 class GmailThreadListResponse(BaseModel):
     threads: list[GmailThreadSummary]
     next_page_token: str | None = None
+    result_size_estimate: int | None = None
 
 
 class GmailMessageResponse(BaseModel):
@@ -78,3 +83,17 @@ class EmailThreadLinkRequest(BaseModel):
 class EmailThreadLinkResponse(BaseModel):
     thread_id: str
     links: list[EmailCrmLink]
+
+
+EmailThreadBatchAction = Literal["mark_read", "mark_unread", "delete"]
+
+
+class EmailThreadBatchRequest(BaseModel):
+    thread_ids: list[str] = Field(min_length=1, max_length=100)
+    action: EmailThreadBatchAction
+
+
+class EmailThreadBatchResponse(BaseModel):
+    thread_ids: list[str]
+    action: EmailThreadBatchAction
+    updated_count: int

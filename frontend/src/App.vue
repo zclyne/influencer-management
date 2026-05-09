@@ -57,9 +57,9 @@ onMounted(loadCampaignContext)
     <a-layout class="app-shell">
       <a-layout-sider class="sidebar" width="244">
         <div class="brand-block">
-          <span class="brand-mark">IRM</span>
+          <span class="brand-mark">CF</span>
           <div>
-            <strong>Desktop IRM</strong>
+            <strong>CreatorFlow</strong>
             <span>Local workbench</span>
           </div>
         </div>
@@ -77,7 +77,7 @@ onMounted(loadCampaignContext)
       <a-layout>
         <a-layout-header class="top-bar">
           <div>
-            <strong>Desktop IRM</strong>
+            <strong>CreatorFlow</strong>
             <span>Campaign-first workspace</span>
           </div>
           <div class="api-box">

@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.common import ApiErrorResponse
 from app.schemas.email_context import (
+    EmailThreadBatchRequest,
+    EmailThreadBatchResponse,
     EmailThreadLinkRequest,
     EmailThreadLinkResponse,
     GmailAuthStartResponse,
@@ -119,6 +121,7 @@ def list_threads(
     deal_id: str | None = None,
     q: str | None = None,
     label: str | None = None,
+    view: str | None = None,
     page_token: str | None = None,
     page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> GmailThreadListResponse | JSONResponse:
@@ -128,9 +131,21 @@ def list_threads(
             deal_id=deal_id,
             query=q,
             label=label,
+            view=view,
             page_token=page_token,
             page_size=page_size,
         )
+    except EmailContextServiceError as exc:
+        return _http_error_response(exc)
+
+
+@router.post("/threads/batch", response_model=EmailThreadBatchResponse, responses=ERROR_RESPONSES)
+def batch_threads(
+    payload: EmailThreadBatchRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> EmailThreadBatchResponse | JSONResponse:
+    try:
+        return EmailContextService(db).batch_threads(payload)
     except EmailContextServiceError as exc:
         return _http_error_response(exc)
 
@@ -143,9 +158,10 @@ def list_threads(
 def get_thread(
     thread_id: str,
     db: Annotated[Session, Depends(get_db)],
+    mark_read: bool = True,
 ) -> GmailThreadDetailResponse | JSONResponse:
     try:
-        return EmailContextService(db).get_thread(thread_id)
+        return EmailContextService(db).get_thread(thread_id, mark_read=mark_read)
     except EmailContextServiceError as exc:
         return _http_error_response(exc)
 

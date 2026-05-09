@@ -12,6 +12,7 @@ import {
   updateDeal,
   updateDealCompensationItem,
   updateDealDeliverable,
+  archiveDeal,
 } from '../api/client'
 import type {
   CampaignResponse,
@@ -191,6 +192,20 @@ export const useDealDetail = (dealId: () => string, campaignId: () => string) =>
     }
   }
 
+  const archiveProfile = async () => {
+    mutating.value = true
+    error.value = null
+
+    try {
+      await archiveDeal(dealId())
+    } catch (mutationError) {
+      error.value = errorMessage(mutationError)
+      throw mutationError
+    } finally {
+      mutating.value = false
+    }
+  }
+
   const campaignName = computed(() => campaign.value?.name ?? 'Campaign')
   const influencerName = computed(() => deal.value?.influencer.display_name ?? 'Deal')
 
@@ -212,5 +227,6 @@ export const useDealDetail = (dealId: () => string, campaignId: () => string) =>
     createCompensationItem,
     updateCompensationItem,
     deleteCompensationItem,
+    archiveProfile,
   }
 }

@@ -34,7 +34,7 @@ def create_app() -> FastAPI:
         yield
 
     app = FastAPI(
-        title="Desktop IRM API",
+        title="CreatorFlow API",
         version="0.1.0",
         openapi_url="/openapi.json",
         lifespan=lifespan,

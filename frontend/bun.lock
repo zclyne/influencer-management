@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "desktop-irm-frontend",
+      "name": "creatorflow-frontend",
       "dependencies": {
         "@vitejs/plugin-vue": "^5.1.4",
         "ant-design-vue": "^4.2.6",

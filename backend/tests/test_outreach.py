@@ -11,8 +11,13 @@ from app.repositories.sqlalchemy import (
 )
 
 
-def _create_outreach_deal(db_session: Session, *, status: DealStatus = DealStatus.APPROVED):
-    campaign = CampaignRepository(db_session).create(name="Spring Launch")
+def _create_outreach_deal(
+    db_session: Session,
+    *,
+    status: DealStatus = DealStatus.APPROVED,
+    campaign_name: str = "Spring Launch",
+):
+    campaign = CampaignRepository(db_session).create(name=campaign_name)
     influencer = InfluencerRepository(db_session).create(display_name="Creator")
     InfluencerContactRepository(db_session).create(
         influencer_id=influencer.id,
@@ -158,7 +163,11 @@ def test_confirm_sent_updates_only_early_statuses(
     db_session: Session,
 ) -> None:
     _, approved = _create_outreach_deal(db_session, status=DealStatus.APPROVED)
-    _, active = _create_outreach_deal(db_session, status=DealStatus.ACTIVE)
+    _, active = _create_outreach_deal(
+        db_session,
+        status=DealStatus.ACTIVE,
+        campaign_name="Summer Launch",
+    )
 
     approved_response = api_client.post(f"/api/v1/deals/{approved.id}/outreach-sent")
     active_response = api_client.post(f"/api/v1/deals/{active.id}/outreach-sent")

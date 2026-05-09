@@ -691,13 +691,16 @@ export interface EmailCrmLink {
   label_id: string
   label_name: string
   campaign_id?: string | null
+  campaign_name?: string | null
   deal_id?: string | null
+  deal_influencer_name?: string | null
 }
 
 export interface GmailThreadSummary {
   id: string
   subject?: string | null
   snippet?: string | null
+  unread: boolean
   participants: EmailParticipant[]
   last_message_at?: string | null
   message_count: number
@@ -708,6 +711,20 @@ export interface GmailThreadSummary {
 export interface GmailThreadListResponse {
   threads: GmailThreadSummary[]
   next_page_token?: string | null
+  result_size_estimate?: number | null
+}
+
+export type EmailThreadBatchAction = 'mark_read' | 'mark_unread' | 'delete'
+
+export interface EmailThreadBatchRequest {
+  thread_ids: string[]
+  action: EmailThreadBatchAction
+}
+
+export interface EmailThreadBatchResponse {
+  thread_ids: string[]
+  action: EmailThreadBatchAction
+  updated_count: number
 }
 
 export interface GmailMessageResponse {

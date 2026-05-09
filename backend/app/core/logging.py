@@ -14,7 +14,7 @@ def configure_logging(level: str) -> None:
 def log_startup(settings: Settings) -> None:
     database_type = urlparse(settings.database_url).scheme or "sqlite"
     logging.getLogger("app.startup").info(
-        "Desktop IRM backend starting env=%s database=%s storage=%s",
+        "CreatorFlow backend starting env=%s database=%s storage=%s",
         settings.app_env,
         database_type,
         settings.local_storage_dir,

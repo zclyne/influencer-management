@@ -33,6 +33,11 @@ class CampaignBrandConflict(CampaignServiceError):
     status_code = 409
 
 
+class CampaignNameConflict(CampaignServiceError):
+    code = "campaign_name_conflict"
+    status_code = 409
+
+
 class CampaignValidationError(CampaignServiceError):
     code = "invalid_campaign"
     status_code = 422
@@ -51,6 +56,7 @@ class CampaignService:
         self.campaign_brands = CampaignBrandRepository(db)
 
     def create_campaign(self, payload: CampaignCreateRequest) -> CampaignResponse:
+        self._ensure_unique_name(payload.name)
         campaign = self.campaigns.create(
             name=payload.name,
             brief=payload.brief,
@@ -106,6 +112,8 @@ class CampaignService:
                 details={"campaign_id": campaign_id},
             )
         values = self._campaign_update_values(payload)
+        if "name" in values:
+            self._ensure_unique_name(str(values["name"]), exclude_campaign_id=campaign.id)
         if values:
             campaign = self.campaigns.update(campaign, **values)
             self.db.commit()
@@ -189,6 +197,19 @@ class CampaignService:
                 details={"campaign_id": campaign_id},
             )
         return campaign
+
+    def _ensure_unique_name(
+        self,
+        name: str,
+        *,
+        exclude_campaign_id: str | None = None,
+    ) -> None:
+        existing = self.campaigns.find_by_name(name)
+        if existing and existing.id != exclude_campaign_id:
+            raise CampaignNameConflict(
+                "Campaign name must be unique.",
+                details={"name": name},
+            )
 
     def _campaign_update_values(self, payload: CampaignUpdateRequest) -> dict[str, Any]:
         values = payload.model_dump(exclude_unset=True)

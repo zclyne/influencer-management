@@ -10,8 +10,8 @@ from app.repositories.sqlalchemy import (
 )
 
 
-def _seed_deal(db_session: Session) -> str:
-    campaign = CampaignRepository(db_session).create(name="Spring Launch")
+def _seed_deal(db_session: Session, *, campaign_name: str = "Spring Launch") -> str:
+    campaign = CampaignRepository(db_session).create(name=campaign_name)
     influencer = InfluencerRepository(db_session).create(display_name="Creator One")
     deal = DealRepository(db_session).create(
         campaign_id=campaign.id,
@@ -75,7 +75,7 @@ def test_deliverable_validation_and_wrong_deal_errors(
     db_session: Session,
 ) -> None:
     deal_id = _seed_deal(db_session)
-    other_deal_id = _seed_deal(db_session)
+    other_deal_id = _seed_deal(db_session, campaign_name="Summer Launch")
     deliverable = DeliverableRepository(db_session).create(
         deal_id=deal_id,
         type="story",

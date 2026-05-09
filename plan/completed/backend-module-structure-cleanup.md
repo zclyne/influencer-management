@@ -48,7 +48,7 @@ Current state:
 - Template CRUD endpoints: `/api/v1/outreach/templates`
 
 This makes `Template` look like an outreach-only concept.
-That is wrong for Desktop IRM because templates can later support outreach emails, contract drafts, reports, summaries, briefs, and other reusable documents.
+That is wrong for CreatorFlow because templates can later support outreach emails, contract drafts, reports, summaries, briefs, and other reusable documents.
 
 Expected direction:
 

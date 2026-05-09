@@ -522,7 +522,11 @@ void loadWorkspace()
         </div>
       </div>
       <div class="page-actions">
-        <a-button :disabled="!campaign || Boolean(campaign.archived_at)" @click="openCampaignEdit">
+        <RouterLink :to="{ name: 'email', query: { campaignId } }">
+          <a-button>Open email</a-button>
+        </RouterLink>
+        <a-button :loading="exporting" @click="downloadExport">Export view</a-button>
+        <a-button type="primary" :disabled="!campaign || Boolean(campaign.archived_at)" @click="openCampaignEdit">
           Edit campaign
         </a-button>
         <a-button
@@ -533,10 +537,6 @@ void loadWorkspace()
         >
           Delete campaign
         </a-button>
-        <RouterLink :to="{ name: 'email', query: { campaignId } }">
-          <a-button>Open email</a-button>
-        </RouterLink>
-        <a-button type="primary" :loading="exporting" @click="downloadExport">Export view</a-button>
       </div>
     </div>
 

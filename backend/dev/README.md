@@ -16,7 +16,7 @@ Useful options:
 
 ```bash
 uv run python -m app.dev.seed_mock_data --skip-migrations
-uv run python -m app.dev.seed_mock_data --database-url sqlite:////tmp/desktop_irm_seed.db
+uv run python -m app.dev.seed_mock_data --database-url sqlite:////tmp/creatorflow_seed.db
 uv run python -m app.dev.seed_mock_data --sql-path dev/mock_data.sql
 ```
 

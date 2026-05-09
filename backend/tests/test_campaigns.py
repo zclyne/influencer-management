@@ -95,6 +95,35 @@ def test_campaign_validation_and_not_found_errors(api_client: TestClient) -> Non
     assert missing_response.json()["details"] == {"campaign_id": "missing"}
 
 
+def test_campaign_name_must_be_unique(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    existing = CampaignRepository(db_session).create(name="Spring Launch")
+    other = CampaignRepository(db_session).create(name="Summer Launch")
+    db_session.commit()
+
+    duplicate_create_response = api_client.post(
+        "/api/v1/campaigns",
+        json={"name": " spring launch "},
+    )
+    assert duplicate_create_response.status_code == 409
+    assert duplicate_create_response.json()["code"] == "campaign_name_conflict"
+
+    duplicate_update_response = api_client.patch(
+        f"/api/v1/campaigns/{other.id}",
+        json={"name": "SPRING LAUNCH"},
+    )
+    assert duplicate_update_response.status_code == 409
+    assert duplicate_update_response.json()["code"] == "campaign_name_conflict"
+
+    same_name_update_response = api_client.patch(
+        f"/api/v1/campaigns/{existing.id}",
+        json={"name": "Spring Launch"},
+    )
+    assert same_name_update_response.status_code == 200
+
+
 def test_campaign_brand_link_lifecycle(
     api_client: TestClient,
     db_session: Session,

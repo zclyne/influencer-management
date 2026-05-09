@@ -26,6 +26,8 @@ import type {
   GmailAuthStartResponse,
   GmailAuthStatusResponse,
   GmailLabelListResponse,
+  EmailThreadBatchAction,
+  EmailThreadBatchResponse,
   GmailThreadDetailResponse,
   GmailThreadListResponse,
   CompensationItemCreateRequest,
@@ -274,6 +276,7 @@ export const listEmailThreads = (
     dealId?: string
     query?: string
     label?: string
+    view?: string
     pageToken?: string
     pageSize?: number
   } = {},
@@ -284,13 +287,32 @@ export const listEmailThreads = (
       deal_id: options.dealId,
       q: options.query,
       label: options.label,
+      view: options.view,
       page_token: options.pageToken,
       page_size: options.pageSize === undefined ? undefined : String(options.pageSize),
     })}`,
   )
 
-export const getEmailThread = (threadId: string) =>
-  apiRequest<GmailThreadDetailResponse>(`/email/threads/${threadId}`)
+export const batchEmailThreads = (payload: {
+  thread_ids: string[]
+  action: EmailThreadBatchAction
+}) =>
+  apiRequest<EmailThreadBatchResponse>('/email/threads/batch', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const getEmailThread = (
+  threadId: string,
+  options: {
+    markRead?: boolean
+  } = {},
+) =>
+  apiRequest<GmailThreadDetailResponse>(
+    `/email/threads/${threadId}${toQueryString({
+      mark_read: options.markRead === undefined ? undefined : String(options.markRead),
+    })}`,
+  )
 
 export const linkEmailThread = (threadId: string, payload: EmailThreadLinkRequest) =>
   apiRequest<EmailThreadLinkResponse>(`/email/threads/${threadId}/links`, {

@@ -14,6 +14,10 @@ from typing import Any
 from urllib.parse import urlencode
 
 import httpx
+from google.auth.transport.requests import Request as GoogleAuthRequest
+from google.oauth2.credentials import Credentials as GoogleCredentials
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -21,6 +25,8 @@ from app.repositories.sqlalchemy import CampaignRepository, DealRepository
 from app.schemas.email_context import (
     EmailCrmLink,
     EmailParticipant,
+    EmailThreadBatchRequest,
+    EmailThreadBatchResponse,
     EmailThreadLinkRequest,
     EmailThreadLinkResponse,
     GmailAuthStartResponse,
@@ -35,7 +41,6 @@ from app.schemas.email_context import (
 
 GMAIL_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GMAIL_TOKEN_URL = "https://oauth2.googleapis.com/token"
-GMAIL_API_ROOT = "https://gmail.googleapis.com/gmail/v1"
 GMAIL_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 GMAIL_SCOPES = [
     "openid",
@@ -43,7 +48,16 @@ GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.modify",
 ]
-CRM_LABEL_ROOT = "DesktopIRM"
+CRM_LABEL_ROOT = "CreatorFlow"
+EMAIL_VIEW_LABELS = {
+    "promotions": ["CATEGORY_PROMOTIONS"],
+    "social": ["CATEGORY_SOCIAL"],
+    "updates": ["CATEGORY_UPDATES"],
+    "forums": ["CATEGORY_FORUMS"],
+    "starred": ["STARRED"],
+    "deleted": ["TRASH"],
+    "spam": ["SPAM"],
+}
 
 
 class EmailContextServiceError(Exception):
@@ -233,31 +247,31 @@ class GmailConnector:
 
     def refresh_access_token(self, credential: GmailCredential) -> GmailCredential:
         if credential.access_token and credential.expires_at:
-            if credential.expires_at > datetime.now(UTC) + timedelta(seconds=60):
+            expires_at = _google_expiry(credential.expires_at)
+            if expires_at and expires_at > datetime.now(UTC) + timedelta(seconds=60):
                 return credential
         self._require_oauth_config()
-        token = self._post_form(
-            GMAIL_TOKEN_URL,
-            {
-                "client_id": self.settings.gmail_client_id,
-                "client_secret": self.settings.gmail_client_secret,
-                "refresh_token": credential.refresh_token,
-                "grant_type": "refresh_token",
-            },
-        )
+        google_credential = self._google_credential(credential)
+        try:
+            google_credential.refresh(GoogleAuthRequest())
+        except Exception as exc:
+            raise EmailProviderError("Google OAuth request failed.") from exc
         refreshed = GmailCredential(
             email=credential.email,
             google_subject=credential.google_subject,
             refresh_token=credential.refresh_token,
-            access_token=str(token["access_token"]),
-            expires_at=_expires_at(token),
-            scopes=str(token.get("scope", " ".join(credential.scopes))).split(),
+            access_token=google_credential.token,
+            expires_at=_google_expiry(google_credential.expiry),
+            scopes=list(google_credential.scopes or credential.scopes),
         )
         self.credential_store.write(refreshed)
         return refreshed
 
     def list_labels(self, access_token: str) -> list[dict[str, Any]]:
-        payload = self._gmail_get("/users/me/labels", access_token)
+        try:
+            payload = self._service(access_token).users().labels().list(userId="me").execute()
+        except HttpError as exc:
+            raise EmailProviderError("Gmail API request failed.") from exc
         return list(payload.get("labels") or [])
 
     def list_threads(
@@ -274,16 +288,27 @@ class GmailConnector:
             params["q"] = query
         if page_token:
             params["pageToken"] = page_token
-        response = self._gmail_get(
-            "/users/me/threads",
-            access_token,
-            params={**params, "labelIds": label_ids},
-        )
+        if label_ids:
+            params["labelIds"] = label_ids
+        try:
+            response = (
+                self._service(access_token)
+                .users()
+                .threads()
+                .list(userId="me", **params)
+                .execute()
+            )
+        except HttpError as exc:
+            raise EmailProviderError("Gmail API request failed.") from exc
         threads = [
             self.get_thread(access_token, str(item["id"]), metadata_only=True)
             for item in response.get("threads") or []
         ]
-        return {"threads": threads, "nextPageToken": response.get("nextPageToken")}
+        return {
+            "threads": threads,
+            "nextPageToken": response.get("nextPageToken"),
+            "resultSizeEstimate": response.get("resultSizeEstimate"),
+        }
 
     def get_thread(
         self, access_token: str, thread_id: str, *, metadata_only: bool = False
@@ -292,18 +317,35 @@ class GmailConnector:
             "format": "metadata" if metadata_only else "full",
             "metadataHeaders": ["From", "To", "Cc", "Subject", "Date"],
         }
-        return self._gmail_get(f"/users/me/threads/{thread_id}", access_token, params=params)
+        try:
+            return dict(
+                self._service(access_token)
+                .users()
+                .threads()
+                .get(userId="me", id=thread_id, **params)
+                .execute()
+            )
+        except HttpError as exc:
+            raise EmailProviderError("Gmail API request failed.") from exc
 
     def create_label(self, access_token: str, name: str) -> dict[str, Any]:
-        return self._gmail_post(
-            "/users/me/labels",
-            access_token,
-            {
-                "name": name,
-                "labelListVisibility": "labelShow",
-                "messageListVisibility": "show",
-            },
-        )
+        try:
+            return dict(
+                self._service(access_token)
+                .users()
+                .labels()
+                .create(
+                    userId="me",
+                    body={
+                        "name": name,
+                        "labelListVisibility": "labelShow",
+                        "messageListVisibility": "show",
+                    },
+                )
+                .execute()
+            )
+        except HttpError as exc:
+            raise EmailProviderError("Gmail API request failed.") from exc
 
     def modify_thread(
         self,
@@ -313,14 +355,38 @@ class GmailConnector:
         add_label_ids: list[str] | None = None,
         remove_label_ids: list[str] | None = None,
     ) -> dict[str, Any]:
-        return self._gmail_post(
-            f"/users/me/threads/{thread_id}/modify",
-            access_token,
-            {
-                "addLabelIds": add_label_ids or [],
-                "removeLabelIds": remove_label_ids or [],
-            },
+        try:
+            return dict(
+                self._service(access_token)
+                .users()
+                .threads()
+                .modify(
+                    userId="me",
+                    id=thread_id,
+                    body={
+                        "addLabelIds": add_label_ids or [],
+                        "removeLabelIds": remove_label_ids or [],
+                    },
+                )
+                .execute()
+            )
+        except HttpError as exc:
+            raise EmailProviderError("Gmail API request failed.") from exc
+
+    def _google_credential(self, credential: GmailCredential) -> GoogleCredentials:
+        return GoogleCredentials(
+            token=credential.access_token,
+            refresh_token=credential.refresh_token,
+            token_uri=GMAIL_TOKEN_URL,
+            client_id=self.settings.gmail_client_id,
+            client_secret=self.settings.gmail_client_secret,
+            scopes=credential.scopes or GMAIL_SCOPES,
+            expiry=_google_client_expiry(credential.expires_at),
         )
+
+    def _service(self, access_token: str):
+        credential = GoogleCredentials(token=access_token, scopes=GMAIL_SCOPES)
+        return build("gmail", "v1", credentials=credential, cache_discovery=False)
 
     def _require_oauth_config(self) -> None:
         if not self.settings.gmail_client_id or not self.settings.gmail_client_secret:
@@ -337,27 +403,6 @@ class GmailConnector:
                 return dict(response.json())
         except httpx.HTTPError as exc:
             raise EmailProviderError("Google OAuth request failed.") from exc
-
-    def _gmail_get(
-        self,
-        path: str,
-        access_token: str,
-        params: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        return self._get_json(f"{GMAIL_API_ROOT}{path}", access_token, params=params)
-
-    def _gmail_post(self, path: str, access_token: str, payload: dict[str, Any]) -> dict[str, Any]:
-        try:
-            with httpx.Client(timeout=20) as client:
-                response = client.post(
-                    f"{GMAIL_API_ROOT}{path}",
-                    headers=_auth_headers(access_token),
-                    json=payload,
-                )
-                response.raise_for_status()
-                return dict(response.json())
-        except httpx.HTTPError as exc:
-            raise EmailProviderError("Gmail API request failed.") from exc
 
     def _get_json(
         self,
@@ -439,6 +484,7 @@ class EmailContextService:
         deal_id: str | None = None,
         query: str | None = None,
         label: str | None = None,
+        view: str | None = None,
         page_token: str | None = None,
         page_size: int = 20,
     ) -> GmailThreadListResponse:
@@ -449,6 +495,7 @@ class EmailContextService:
             campaign_id=campaign_id,
             deal_id=deal_id,
             label=label,
+            view=view,
         )
         if label_ids is None:
             return GmailThreadListResponse(threads=[])
@@ -462,13 +509,54 @@ class EmailContextService:
         return GmailThreadListResponse(
             threads=[self._thread_summary(thread, labels) for thread in payload["threads"]],
             next_page_token=payload.get("nextPageToken"),
+            result_size_estimate=payload.get("resultSizeEstimate"),
         )
 
-    def get_thread(self, thread_id: str) -> GmailThreadDetailResponse:
+    def batch_threads(self, payload: EmailThreadBatchRequest) -> EmailThreadBatchResponse:
+        thread_ids = list(dict.fromkeys(payload.thread_ids))
+        if not thread_ids:
+            raise EmailContextServiceError("At least one thread_id is required.")
+        add_label_ids: list[str] = []
+        remove_label_ids: list[str] = []
+        if payload.action == "mark_read":
+            remove_label_ids = ["UNREAD"]
+        elif payload.action == "mark_unread":
+            add_label_ids = ["UNREAD"]
+        elif payload.action == "delete":
+            add_label_ids = ["TRASH"]
+            remove_label_ids = ["INBOX"]
+        else:
+            raise EmailContextServiceError(
+                "Unsupported email batch action.",
+                details={"action": payload.action},
+            )
+        credential = self._credential()
+        for thread_id in thread_ids:
+            self.connector.modify_thread(
+                credential.access_token or "",
+                thread_id,
+                add_label_ids=add_label_ids,
+                remove_label_ids=remove_label_ids,
+            )
+        return EmailThreadBatchResponse(
+            thread_ids=thread_ids,
+            action=payload.action,
+            updated_count=len(thread_ids),
+        )
+
+    def get_thread(self, thread_id: str, *, mark_read: bool = True) -> GmailThreadDetailResponse:
         credential = self._credential()
         labels = self._labels(credential)
         thread = self.connector.get_thread(credential.access_token or "", thread_id)
         summary = self._thread_summary(thread, labels)
+        if mark_read and summary.unread:
+            self.connector.modify_thread(
+                credential.access_token or "",
+                thread_id,
+                remove_label_ids=["UNREAD"],
+            )
+            _remove_thread_label(thread, "UNREAD")
+            summary = self._thread_summary(thread, labels)
         return GmailThreadDetailResponse(
             **summary.model_dump(),
             messages=[_message_response(message) for message in thread.get("messages") or []],
@@ -560,19 +648,54 @@ class EmailContextService:
         campaign_id: str | None,
         deal_id: str | None,
         label: str | None,
+        view: str | None,
     ) -> list[str] | None:
+        view_label_ids = self._view_label_ids(labels, view or "primary")
+        if view_label_ids is None:
+            return None
+        filter_label_ids: list[str] = []
         if deal_id:
             self._require_deal(deal_id)
             deal_label = self._find_label(labels, self._deal_label(deal_id))
-            return [str(deal_label["id"])] if deal_label else None
-        if campaign_id:
+            if not deal_label:
+                return None
+            filter_label_ids.append(str(deal_label["id"]))
+        elif campaign_id:
             self._require_campaign(campaign_id)
             campaign_label = self._find_label(labels, self._campaign_label(campaign_id))
-            return [str(campaign_label["id"])] if campaign_label else None
-        if label:
+            if not campaign_label:
+                return None
+            filter_label_ids.append(str(campaign_label["id"]))
+        elif label:
             requested = self._find_label(labels, label)
-            return [str(requested["id"])] if requested else None
-        return []
+            if not requested:
+                return None
+            filter_label_ids.append(str(requested["id"]))
+        return sorted(set(view_label_ids + filter_label_ids))
+
+    def _view_label_ids(self, labels: list[dict[str, Any]], view: str) -> list[str] | None:
+        normalized = view.strip().lower()
+        if normalized == "primary":
+            inbox = self._find_label(labels, "INBOX")
+            if not inbox:
+                return None
+            category = self._find_label(labels, "CATEGORY_PERSONAL")
+            label_ids = [str(inbox["id"])]
+            if category:
+                label_ids.append(str(category["id"]))
+            return label_ids
+        if normalized not in EMAIL_VIEW_LABELS:
+            raise EmailContextServiceError(
+                "Unsupported email view.",
+                details={"view": view, "supported": ["primary", *EMAIL_VIEW_LABELS.keys()]},
+            )
+        label_ids: list[str] = []
+        for label_name in EMAIL_VIEW_LABELS[normalized]:
+            label = self._find_label(labels, label_name)
+            if not label:
+                return None
+            label_ids.append(str(label["id"]))
+        return label_ids
 
     def _thread_summary(
         self,
@@ -588,13 +711,14 @@ class EmailContextService:
             link
             for label_id in label_ids
             if label_id in label_lookup
-            for link in [_crm_link(label_lookup[label_id])]
+            for link in [self._crm_link(label_lookup[label_id])]
             if link is not None
         ]
         return GmailThreadSummary(
             id=str(thread["id"]),
             subject=first_headers.get("subject"),
             snippet=thread.get("snippet") or last_message.get("snippet"),
+            unread="UNREAD" in label_ids,
             participants=_participants_from_messages(messages),
             last_message_at=_message_datetime(last_message),
             message_count=len(messages),
@@ -622,15 +746,17 @@ class EmailContextService:
         return None
 
     def _campaign_label(self, campaign_id: str) -> str:
-        return f"{CRM_LABEL_ROOT}/Campaigns/{campaign_id}"
+        campaign = self._require_campaign(campaign_id)
+        return f"{CRM_LABEL_ROOT}/Campaigns/{campaign.name}"
 
     def _deal_label(self, deal_id: str) -> str:
         return f"{CRM_LABEL_ROOT}/Deals/{deal_id}"
 
-    def _require_campaign(self, campaign_id: str) -> None:
+    def _require_campaign(self, campaign_id: str):
         campaign = self.campaigns.get(campaign_id)
         if not campaign:
             raise EmailNotFound("Campaign not found.", details={"campaign_id": campaign_id})
+        return campaign
 
     def _require_deal(self, deal_id: str):
         deal = self.deals.get_detail(deal_id)
@@ -638,12 +764,57 @@ class EmailContextService:
             raise EmailNotFound("Deal not found.", details={"deal_id": deal_id})
         return deal
 
+    def _crm_link(self, label: dict[str, Any]) -> EmailCrmLink | None:
+        label_id = str(label["id"])
+        name = str(label.get("name", ""))
+        campaign_prefix = f"{CRM_LABEL_ROOT}/Campaigns/"
+        deal_prefix = f"{CRM_LABEL_ROOT}/Deals/"
+        if name.startswith(campaign_prefix):
+            label_value = name.removeprefix(campaign_prefix)
+            campaign = self.campaigns.get(label_value) or self.campaigns.find_by_name(label_value)
+            return EmailCrmLink(
+                type="campaign",
+                label_id=label_id,
+                label_name=name,
+                campaign_id=campaign.id if campaign else None,
+                campaign_name=campaign.name if campaign else label_value,
+            )
+        if name.startswith(deal_prefix):
+            deal_id = name.removeprefix(deal_prefix)
+            deal = self.deals.get_detail(deal_id)
+            return EmailCrmLink(
+                type="deal",
+                label_id=label_id,
+                label_name=name,
+                campaign_id=deal.campaign_id if deal else None,
+                campaign_name=deal.campaign.name if deal and deal.campaign else None,
+                deal_id=deal_id,
+                deal_influencer_name=deal.influencer.display_name if deal and deal.influencer else None,
+            )
+        return None
+
 
 def _expires_at(token: dict[str, Any]) -> datetime | None:
     expires_in = token.get("expires_in")
     if not expires_in:
         return None
     return datetime.now(UTC) + timedelta(seconds=int(expires_in))
+
+
+def _google_client_expiry(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo:
+        return value.astimezone(UTC).replace(tzinfo=None)
+    return value
+
+
+def _google_expiry(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo:
+        return value.astimezone(UTC)
+    return value.replace(tzinfo=UTC)
 
 
 def _label_response(label: dict[str, Any]) -> GmailLabelResponse:
@@ -654,26 +825,10 @@ def _label_response(label: dict[str, Any]) -> GmailLabelResponse:
     )
 
 
-def _crm_link(label: dict[str, Any]) -> EmailCrmLink | None:
-    label_id = str(label["id"])
-    name = str(label.get("name", ""))
-    campaign_prefix = f"{CRM_LABEL_ROOT}/Campaigns/"
-    deal_prefix = f"{CRM_LABEL_ROOT}/Deals/"
-    if name.startswith(campaign_prefix):
-        return EmailCrmLink(
-            type="campaign",
-            label_id=label_id,
-            label_name=name,
-            campaign_id=name.removeprefix(campaign_prefix),
-        )
-    if name.startswith(deal_prefix):
-        return EmailCrmLink(
-            type="deal",
-            label_id=label_id,
-            label_name=name,
-            deal_id=name.removeprefix(deal_prefix),
-        )
-    return None
+def _remove_thread_label(thread: dict[str, Any], label_id: str) -> None:
+    for message in thread.get("messages") or []:
+        label_ids = [item for item in message.get("labelIds") or [] if item != label_id]
+        message["labelIds"] = label_ids
 
 
 def _headers(message: dict[str, Any]) -> dict[str, str]:

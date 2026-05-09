@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
-import { message, type FormInstance, type TableColumnsType } from 'ant-design-vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
 import type {
   CompensationItemResponse,
   CompensationItemStatus,
@@ -47,6 +47,7 @@ interface CompensationForm {
 }
 
 const route = useRoute()
+const router = useRouter()
 const campaignId = computed(() => String(route.params.campaignId ?? ''))
 const dealId = computed(() => String(route.params.dealId ?? ''))
 
@@ -79,6 +80,7 @@ const {
   createCompensationItem,
   updateCompensationItem,
   deleteCompensationItem,
+  archiveProfile,
 } = useDealDetail(() => dealId.value, () => campaignId.value)
 
 const dealForm = reactive<DealEditForm>({
@@ -456,6 +458,27 @@ const removeCompensationItem = async (item: CompensationItemResponse) => {
   }
 }
 
+const confirmArchive = () => {
+  if (!deal.value) return
+
+  Modal.confirm({
+    title: 'Delete this deal?',
+    content: 'Deleted deals are hidden from campaign workspaces but remain available in history.',
+    okText: 'Delete',
+    okType: 'danger',
+    cancelText: 'Cancel',
+    async onOk() {
+      try {
+        await archiveProfile()
+        message.success(`${influencerName.value} deal deleted.`)
+        await router.push({ name: 'campaignWorkspace', params: { campaignId: campaignId.value } })
+      } catch {
+        message.error('Deal could not be deleted.')
+      }
+    },
+  })
+}
+
 watch([campaignId, dealId], () => {
   void loadDealDetail()
 })
@@ -491,13 +514,21 @@ void loadDealDetail()
             </div>
           </div>
           <div class="page-actions">
-            <RouterLink :to="{ name: 'campaignWorkspace', params: { campaignId } }">
-              <a-button>Open campaign</a-button>
-            </RouterLink>
             <RouterLink :to="{ name: 'influencerDetail', params: { influencerId: deal.influencer.id } }">
               <a-button>Open influencer</a-button>
             </RouterLink>
+            <RouterLink :to="{ name: 'email', query: { campaignId, dealId } }">
+              <a-button>Open email</a-button>
+            </RouterLink>
             <a-button type="primary" @click="openDealEdit">Edit deal</a-button>
+            <a-button
+              danger
+              :disabled="Boolean(deal.archived_at)"
+              :loading="mutating"
+              @click="confirmArchive"
+            >
+              Delete deal
+            </a-button>
           </div>
         </div>
 
@@ -522,9 +553,6 @@ void loadDealDetail()
                   Primary contact:
                   <strong>{{ deal.primary_contact?.email ?? 'No contact' }}</strong>
                 </span>
-                <RouterLink :to="{ name: 'influencerDetail', params: { influencerId: deal.influencer.id } }">
-                  <a-button>Open influencer</a-button>
-                </RouterLink>
               </div>
             </div>
           </a-card>
@@ -563,11 +591,6 @@ void loadDealDetail()
                 {{ deal.primary_contact?.role ?? 'Not set' }}
               </a-descriptions-item>
             </a-descriptions>
-            <template #actions>
-              <RouterLink :to="{ name: 'email', query: { campaignId, dealId } }">
-                <a-button type="link">Open email</a-button>
-              </RouterLink>
-            </template>
           </a-card>
         </div>
 
@@ -688,16 +711,6 @@ void loadDealDetail()
                 <a-button disabled>Attach file</a-button>
               </a-tooltip>
             </div>
-          </a-card>
-
-          <a-card class="section-card">
-            <template #title>Email</template>
-            <p class="section-copy">
-              Review Gmail threads linked through Desktop IRM labels for this deal.
-            </p>
-            <RouterLink :to="{ name: 'email', query: { campaignId, dealId } }">
-              <a-button>Open deal email</a-button>
-            </RouterLink>
           </a-card>
         </div>
       </template>

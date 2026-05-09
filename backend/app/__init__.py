@@ -1,2 +1,2 @@
-"""Desktop IRM backend package."""
+"""CreatorFlow backend package."""
 

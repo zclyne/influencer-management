@@ -14,12 +14,12 @@ ON CONFLICT(id) DO UPDATE SET
   archived_at = excluded.archived_at,
   updated_at = excluded.updated_at;
 
-INSERT INTO campaigns (id, name, brief, budget, start_date, end_date, status, notes, archived_at, created_at, updated_at) VALUES
-  ('22222222-2222-2222-2222-222222222221', 'Spring Skincare Launch', 'Launch Northstar Beauty serum with education-first creator content.', 75000.00, '2026-05-01', '2026-06-15', 'ACTIVE', 'Priority campaign for frontend testing.', NULL, '2026-04-05 09:00:00', '2026-04-27 16:00:00'),
-  ('22222222-2222-2222-2222-222222222222', 'Trail Summer Kit', 'Seed the new ultralight hiking kit with outdoor creators.', 42000.00, '2026-06-01', '2026-07-31', 'PLANNING', 'Needs shortlist review.', NULL, '2026-04-06 09:00:00', '2026-04-26 15:00:00'),
-  ('22222222-2222-2222-2222-222222222223', 'Creator Tech Desk', 'Evaluate desk setup creators for ByteBloom product release.', 56000.00, '2026-04-15', '2026-05-30', 'EVALUATING', 'Testing evaluation state.', NULL, '2026-04-07 09:00:00', '2026-04-25 14:00:00'),
-  ('22222222-2222-2222-2222-222222222224', 'Holiday Recap', 'Closed holiday campaign retained for historical views.', 31000.00, '2025-11-01', '2025-12-31', 'CLOSED', 'Closed campaign with completed rows.', NULL, '2025-10-01 09:00:00', '2026-01-10 14:00:00'),
-  ('22222222-2222-2222-2222-222222222225', 'Archived Campaign', 'Archived campaign for include archived testing.', 15000.00, '2025-08-01', '2025-08-31', 'CLOSED', 'Archived campaign.', '2026-02-01 10:00:00', '2025-07-01 09:00:00', '2026-02-01 10:00:00')
+INSERT INTO campaigns (id, name, brief, budget, start_date, end_date, status, notes, tags_json, archived_at, created_at, updated_at) VALUES
+  ('22222222-2222-2222-2222-222222222221', 'Spring Skincare Launch', 'Launch Northstar Beauty serum with education-first creator content.', 75000.00, '2026-05-01', '2026-06-15', 'ACTIVE', 'Priority campaign for frontend testing.', json('["beauty","skincare","launch"]'), NULL, '2026-04-05 09:00:00', '2026-04-27 16:00:00'),
+  ('22222222-2222-2222-2222-222222222222', 'Trail Summer Kit', 'Seed the new ultralight hiking kit with outdoor creators.', 42000.00, '2026-06-01', '2026-07-31', 'PLANNING', 'Needs shortlist review.', json('["outdoor","seeding","summer"]'), NULL, '2026-04-06 09:00:00', '2026-04-26 15:00:00'),
+  ('22222222-2222-2222-2222-222222222223', 'Creator Tech Desk', 'Evaluate desk setup creators for ByteBloom product release.', 56000.00, '2026-04-15', '2026-05-30', 'EVALUATING', 'Testing evaluation state.', json('["tech","desk setup","evaluation"]'), NULL, '2026-04-07 09:00:00', '2026-04-25 14:00:00'),
+  ('22222222-2222-2222-2222-222222222224', 'Holiday Recap', 'Closed holiday campaign retained for historical views.', 31000.00, '2025-11-01', '2025-12-31', 'CLOSED', 'Closed campaign with completed rows.', json('["holiday","closed","reporting"]'), NULL, '2025-10-01 09:00:00', '2026-01-10 14:00:00'),
+  ('22222222-2222-2222-2222-222222222225', 'Archived Campaign', 'Archived campaign for include archived testing.', 15000.00, '2025-08-01', '2025-08-31', 'CLOSED', 'Archived campaign.', json('["archived","legacy"]'), '2026-02-01 10:00:00', '2025-07-01 09:00:00', '2026-02-01 10:00:00')
 ON CONFLICT(id) DO UPDATE SET
   name = excluded.name,
   brief = excluded.brief,
@@ -28,6 +28,7 @@ ON CONFLICT(id) DO UPDATE SET
   end_date = excluded.end_date,
   status = excluded.status,
   notes = excluded.notes,
+  tags_json = excluded.tags_json,
   archived_at = excluded.archived_at,
   updated_at = excluded.updated_at;
 
@@ -44,15 +45,15 @@ ON CONFLICT(id) DO UPDATE SET
   notes = excluded.notes,
   updated_at = excluded.updated_at;
 
-INSERT INTO influencers (id, display_name, full_name, gender, country, city, bio, notes, archived_at, created_at, updated_at) VALUES
-  ('44444444-4444-4444-4444-444444444441', 'Maya Chen', 'Maya Chen', 'female', 'United States', 'Los Angeles', 'Beauty creator focused on sensitive skin routines.', 'Strong fit for serum education.', NULL, '2026-04-08 08:00:00', '2026-04-27 13:00:00'),
-  ('44444444-4444-4444-4444-444444444442', 'Riley Brooks', 'Riley Brooks', 'nonbinary', 'United States', 'Denver', 'Outdoor creator with hiking and camping reviews.', 'Manager-led negotiations.', NULL, '2026-04-08 08:10:00', '2026-04-26 13:00:00'),
-  ('44444444-4444-4444-4444-444444444443', 'Sofia Mendes', 'Sofia Mendes', 'female', 'Brazil', 'Sao Paulo', 'Lifestyle creator with beauty and wellness content.', 'Portuguese and English captions.', NULL, '2026-04-08 08:20:00', '2026-04-25 13:00:00'),
-  ('44444444-4444-4444-4444-444444444444', 'Noah Patel', 'Noah Patel', 'male', 'United Kingdom', 'London', 'Desk setup and consumer tech reviewer.', 'Good technical demos.', NULL, '2026-04-08 08:30:00', '2026-04-24 13:00:00'),
-  ('44444444-4444-4444-4444-444444444445', 'Avery Stone', 'Avery Stone', 'female', 'Canada', 'Vancouver', 'Adventure travel creator with strong video performance.', 'Travel reimbursement likely.', NULL, '2026-04-08 08:40:00', '2026-04-23 13:00:00'),
-  ('44444444-4444-4444-4444-444444444446', 'Kenji Tanaka', 'Kenji Tanaka', 'male', 'Japan', 'Tokyo', 'Minimal desk and productivity creator.', 'High YouTube intent.', NULL, '2026-04-08 08:50:00', '2026-04-22 13:00:00'),
-  ('44444444-4444-4444-4444-444444444447', 'Lina Park', 'Lina Park', 'female', 'South Korea', 'Seoul', 'Skincare and K-beauty creator.', 'Potential duplicate import checks.', NULL, '2026-04-08 09:00:00', '2026-04-21 13:00:00'),
-  ('44444444-4444-4444-4444-444444444448', 'Archived Creator', 'Archived Creator', 'unknown', 'United States', 'Austin', 'Archived creator retained for filters.', 'Archived influencer.', '2026-03-01 10:00:00', '2026-01-08 09:00:00', '2026-03-01 10:00:00')
+INSERT INTO influencers (id, display_name, full_name, gender, country, city, bio, notes, tags_json, archived_at, created_at, updated_at) VALUES
+  ('44444444-4444-4444-4444-444444444441', 'Maya Chen', 'Maya Chen', 'female', 'United States', 'Los Angeles', 'Beauty creator focused on sensitive skin routines.', 'Strong fit for serum education.', json('["beauty","skincare","macro"]'), NULL, '2026-04-08 08:00:00', '2026-04-27 13:00:00'),
+  ('44444444-4444-4444-4444-444444444442', 'Riley Brooks', 'Riley Brooks', 'nonbinary', 'United States', 'Denver', 'Outdoor creator with hiking and camping reviews.', 'Manager-led negotiations.', json('["outdoor","manager-led","youtube"]'), NULL, '2026-04-08 08:10:00', '2026-04-26 13:00:00'),
+  ('44444444-4444-4444-4444-444444444443', 'Sofia Mendes', 'Sofia Mendes', 'female', 'Brazil', 'Sao Paulo', 'Lifestyle creator with beauty and wellness content.', 'Portuguese and English captions.', json('["beauty","LATAM","bilingual"]'), NULL, '2026-04-08 08:20:00', '2026-04-25 13:00:00'),
+  ('44444444-4444-4444-4444-444444444444', 'Noah Patel', 'Noah Patel', 'male', 'United Kingdom', 'London', 'Desk setup and consumer tech reviewer.', 'Good technical demos.', json('["tech","desk setup","reviewer"]'), NULL, '2026-04-08 08:30:00', '2026-04-24 13:00:00'),
+  ('44444444-4444-4444-4444-444444444445', 'Avery Stone', 'Avery Stone', 'female', 'Canada', 'Vancouver', 'Adventure travel creator with strong video performance.', 'Travel reimbursement likely.', json('["travel","outdoor","reimbursement"]'), NULL, '2026-04-08 08:40:00', '2026-04-23 13:00:00'),
+  ('44444444-4444-4444-4444-444444444446', 'Kenji Tanaka', 'Kenji Tanaka', 'male', 'Japan', 'Tokyo', 'Minimal desk and productivity creator.', 'High YouTube intent.', json('["tech","productivity","Japan"]'), NULL, '2026-04-08 08:50:00', '2026-04-22 13:00:00'),
+  ('44444444-4444-4444-4444-444444444447', 'Lina Park', 'Lina Park', 'female', 'South Korea', 'Seoul', 'Skincare and K-beauty creator.', 'Potential duplicate import checks.', json('["skincare","K-beauty","Korea"]'), NULL, '2026-04-08 09:00:00', '2026-04-21 13:00:00'),
+  ('44444444-4444-4444-4444-444444444448', 'Archived Creator', 'Archived Creator', 'unknown', 'United States', 'Austin', 'Archived creator retained for filters.', 'Archived influencer.', json('["archived","legacy"]'), '2026-03-01 10:00:00', '2026-01-08 09:00:00', '2026-03-01 10:00:00')
 ON CONFLICT(id) DO UPDATE SET
   display_name = excluded.display_name,
   full_name = excluded.full_name,
@@ -61,6 +62,7 @@ ON CONFLICT(id) DO UPDATE SET
   city = excluded.city,
   bio = excluded.bio,
   notes = excluded.notes,
+  tags_json = excluded.tags_json,
   archived_at = excluded.archived_at,
   updated_at = excluded.updated_at;
 

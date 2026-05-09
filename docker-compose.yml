@@ -22,11 +22,11 @@ services:
       - "8000:8000"
     environment:
       APP_ENV: local
-      DATABASE_URL: sqlite:////app/.data/desktop_irm.db
+      DATABASE_URL: sqlite:////app/.data/creatorflow.db
       REDIS_URL: redis://redis:6379/0
       LOCAL_STORAGE_DIR: /app/.data/storage
       CORS_ORIGINS: http://localhost:5173
-      UV_PROJECT_ENVIRONMENT: /tmp/desktop-irm-backend-venv
+      UV_PROJECT_ENVIRONMENT: /tmp/creatorflow-backend-venv
     volumes:
       - .:/app
     depends_on:
@@ -38,10 +38,10 @@ services:
     command: uv run python -m app.tasks.worker
     environment:
       APP_ENV: local
-      DATABASE_URL: sqlite:////app/.data/desktop_irm.db
+      DATABASE_URL: sqlite:////app/.data/creatorflow.db
       REDIS_URL: redis://redis:6379/0
       LOCAL_STORAGE_DIR: /app/.data/storage
-      UV_PROJECT_ENVIRONMENT: /tmp/desktop-irm-worker-venv
+      UV_PROJECT_ENVIRONMENT: /tmp/creatorflow-worker-venv
     volumes:
       - .:/app
     depends_on:

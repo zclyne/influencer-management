@@ -74,6 +74,7 @@ def test_seeded_campaign_and_influencer_api_smoke(
         "22222222-2222-2222-2222-222222222224",
     ]
     assert campaigns[0]["brands"][0]["brand"]["name"] == "Northstar Beauty"
+    assert campaigns[0]["tags"] == ["beauty", "skincare", "launch"]
 
     archived_response = api_client.get("/api/v1/campaigns", params={"include_archived": True})
     assert archived_response.status_code == 200
@@ -86,6 +87,7 @@ def test_seeded_campaign_and_influencer_api_smoke(
     maya = next(item for item in influencers if item["id"] == MULTI_PLATFORM_INFLUENCER_ID)
     assert maya["primary_platform"]["platform"] == "tiktok"
     assert maya["follower_count"] == 380000
+    assert maya["tags"] == ["beauty", "skincare", "macro"]
 
     influencer_detail_response = api_client.get(
         f"/api/v1/influencers/{MULTI_PLATFORM_INFLUENCER_ID}"

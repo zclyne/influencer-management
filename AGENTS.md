@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Desktop IRM is a local-first desktop influencer relationship manager for small agency teams running influencer marketing campaigns. The core workflow is:
+CreatorFlow is a local-first desktop influencer relationship manager for small agency teams running influencer marketing campaigns. The core workflow is:
 
 1. Import influencers from external lists, especially Modash CSV exports.
 2. Normalize, preview, deduplicate, and confirm influencer writes.
@@ -243,11 +243,11 @@ Email is a Gmail-backed read/link workflow, not a local email data domain.
 Do not add local email account, thread metadata, message, or thread-link business tables for MVP.
 The only local Email persistence is the single-account Gmail OAuth credential secret.
 
-Campaign and Deal email mapping is stored in Gmail labels managed under a reserved Desktop IRM
+Campaign and Deal email mapping is stored in Gmail labels managed under a reserved CreatorFlow
 namespace. Linking a thread to a Deal applies both the Deal label and its parent Campaign label.
 
 Do not silently mutate Deal status from email activity in MVP.
-Do not send, reply, archive, mark read, or mutate non-IRM Gmail labels unless the Email plan
+Do not send, reply, archive, mark read, or mutate non-CreatorFlow Gmail labels unless the Email plan
 explicitly expands the module.
 
 ### Contract Drafts

@@ -15,7 +15,7 @@ When this module is implemented and verified, move this file to `plan/completed/
 
 ## Goal
 
-Build the actual Desktop IRM workbench UI around Campaign Workspace and supporting library/detail flows.
+Build the actual CreatorFlow workbench UI around Campaign Workspace and supporting library/detail flows.
 
 ## Scope
 
@@ -157,7 +157,7 @@ Manual:
 
 ## Done Criteria
 
-- The first screen is a usable Desktop IRM workspace.
+- The first screen is a usable CreatorFlow workspace.
 - Core navigation and API client exist.
 - Campaign Workspace and Ingestion Wizard can call real backend endpoints.
 - Frontend does not duplicate final normalization, dedup, or status rules.

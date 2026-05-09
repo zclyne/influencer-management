@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
+  batchEmailThreads,
   disconnectEmail,
   errorMessage,
   getEmailAuthStatus,
@@ -19,6 +20,7 @@ import type {
   CampaignResponse,
   DealPipelineRow,
   EmailCrmLink,
+  EmailThreadBatchAction,
   GmailAuthStatusResponse,
   GmailLabelResponse,
   GmailThreadDetailResponse,
@@ -28,6 +30,21 @@ import type {
 const route = useRoute()
 const router = useRouter()
 
+const mailViews = [
+  { label: 'Primary', value: 'primary' },
+  { label: 'Promotions', value: 'promotions' },
+  { label: 'Social', value: 'social' },
+  { label: 'Updates', value: 'updates' },
+  { label: 'Forums', value: 'forums' },
+  { label: 'Starred', value: 'starred' },
+  { label: 'Deleted', value: 'deleted' },
+  { label: 'Spam', value: 'spam' },
+]
+
+const routeView = route.query.view as string | undefined
+const initialMailView =
+  routeView && mailViews.some((view) => view.value === routeView) ? routeView : 'primary'
+
 const authStatus = ref<GmailAuthStatusResponse | null>(null)
 const campaigns = ref<CampaignResponse[]>([])
 const deals = ref<DealPipelineRow[]>([])
@@ -35,16 +52,29 @@ const labels = ref<GmailLabelResponse[]>([])
 const threads = ref<GmailThreadSummary[]>([])
 const selectedThread = ref<GmailThreadDetailResponse | null>(null)
 const nextPageToken = ref<string | null>(null)
+const resultSizeEstimate = ref<number | null>(null)
+const pageTokens = ref<(string | undefined)[]>([undefined])
+const currentPageIndex = ref(0)
+const selectedMailView = ref<string>(initialMailView)
 const selectedCampaignId = ref<string | undefined>(route.query.campaignId as string | undefined)
 const selectedDealId = ref<string | undefined>(route.query.dealId as string | undefined)
 const selectedLabel = ref<string | undefined>()
+const selectedThreadIds = ref<string[]>([])
 const query = ref('')
 const loading = ref(false)
 const detailLoading = ref(false)
 const authLoading = ref(false)
+const batchLoading = ref(false)
+const linkModalOpen = ref(false)
+const linkSaving = ref(false)
+const linkDealsLoading = ref(false)
+const linkCampaignId = ref<string | undefined>()
+const linkDealId = ref<string | undefined>()
+const linkDeals = ref<DealPipelineRow[]>([])
 const error = ref<string | null>(null)
 
 const connected = computed(() => authStatus.value?.connected === true)
+const pageSize = 20
 
 const campaignOptions = computed(() =>
   campaigns.value.map((campaign) => ({ label: campaign.name, value: campaign.id })),
@@ -57,6 +87,13 @@ const dealOptions = computed(() =>
   })),
 )
 
+const linkDealOptions = computed(() =>
+  linkDeals.value.map((deal) => ({
+    label: deal.influencer.display_name,
+    value: deal.id,
+  })),
+)
+
 const labelOptions = computed(() =>
   labels.value
     .filter((label) => label.type !== 'system')
@@ -64,6 +101,28 @@ const labelOptions = computed(() =>
 )
 
 const selectedThreadId = computed(() => selectedThread.value?.id ?? (route.query.threadId as string | undefined))
+
+const threadRangeLabel = computed(() => {
+  if (!threads.value.length) return '0'
+  const start = currentPageIndex.value * pageSize + 1
+  const end = start + threads.value.length - 1
+  if (resultSizeEstimate.value !== null) {
+    return `${start}-${end} of about ${resultSizeEstimate.value}`
+  }
+  return `${start}-${end}`
+})
+
+const hasPreviousPage = computed(() => currentPageIndex.value > 0)
+const hasNextPage = computed(() => Boolean(nextPageToken.value))
+const selectedThreadHasLinks = computed(() => Boolean(selectedThread.value?.crm_links.length))
+const selectedThreadIdSet = computed(() => new Set(selectedThreadIds.value))
+const selectedVisibleCount = computed(
+  () => threads.value.filter((thread) => selectedThreadIdSet.value.has(thread.id)).length,
+)
+const allVisibleSelected = computed(
+  () => threads.value.length > 0 && selectedVisibleCount.value === threads.value.length,
+)
+const hasSelectedThreads = computed(() => selectedThreadIds.value.length > 0)
 
 const loadAuthStatus = async () => {
   authStatus.value = await getEmailAuthStatus()
@@ -98,6 +157,7 @@ const disconnect = async () => {
 
 const syncQueryToRoute = () => {
   const nextQuery: Record<string, string> = {}
+  if (selectedMailView.value !== 'primary') nextQuery.view = selectedMailView.value
   if (selectedCampaignId.value) nextQuery.campaignId = selectedCampaignId.value
   if (selectedDealId.value) nextQuery.dealId = selectedDealId.value
   if (selectedThread.value?.id) nextQuery.threadId = selectedThread.value.id
@@ -126,7 +186,13 @@ const loadLabels = async () => {
   labels.value = (await listEmailLabels()).labels
 }
 
-const loadThreads = async (pageToken?: string) => {
+const loadThreads = async ({
+  pageIndex = 0,
+  preserveSelection = false,
+}: {
+  pageIndex?: number
+  preserveSelection?: boolean
+} = {}) => {
   if (!connected.value) return
   loading.value = true
   error.value = null
@@ -136,15 +202,30 @@ const loadThreads = async (pageToken?: string) => {
       dealId: selectedDealId.value,
       query: query.value.trim() || undefined,
       label: selectedLabel.value,
-      pageToken,
-      pageSize: 20,
+      view: selectedMailView.value,
+      pageToken: pageTokens.value[pageIndex],
+      pageSize,
     })
-    threads.value = pageToken ? [...threads.value, ...response.threads] : response.threads
+    threads.value = response.threads
+    selectedThreadIds.value = []
     nextPageToken.value = response.next_page_token ?? null
-    if (!pageToken && response.threads.length > 0) {
-      await openThread(response.threads[0].id)
+    resultSizeEstimate.value = response.result_size_estimate ?? null
+    currentPageIndex.value = pageIndex
+    if (response.next_page_token) {
+      pageTokens.value = [
+        ...pageTokens.value.slice(0, pageIndex + 1),
+        response.next_page_token,
+      ]
+    } else {
+      pageTokens.value = pageTokens.value.slice(0, pageIndex + 1)
     }
-    if (!pageToken && response.threads.length === 0) {
+
+    const existingThreadId = preserveSelection ? selectedThread.value?.id : undefined
+    const preferredThread =
+      response.threads.find((thread) => thread.id === existingThreadId) ?? response.threads[0]
+    if (preferredThread) {
+      await openThread(preferredThread.id, { markRead: false })
+    } else {
       selectedThread.value = null
     }
     syncQueryToRoute()
@@ -155,10 +236,87 @@ const loadThreads = async (pageToken?: string) => {
   }
 }
 
-const openThread = async (threadId: string) => {
+const resetThreadPagination = async () => {
+  pageTokens.value = [undefined]
+  currentPageIndex.value = 0
+  await loadThreads({ pageIndex: 0 })
+}
+
+const refreshCurrentPage = async () => {
+  await loadThreads({ pageIndex: currentPageIndex.value, preserveSelection: true })
+}
+
+const loadPreviousPage = async () => {
+  if (!hasPreviousPage.value) return
+  await loadThreads({ pageIndex: currentPageIndex.value - 1 })
+}
+
+const loadNextPage = async () => {
+  if (!hasNextPage.value) return
+  await loadThreads({ pageIndex: currentPageIndex.value + 1 })
+}
+
+const toggleThreadSelection = (threadId: string) => {
+  if (selectedThreadIdSet.value.has(threadId)) {
+    selectedThreadIds.value = selectedThreadIds.value.filter((id) => id !== threadId)
+    return
+  }
+  selectedThreadIds.value = [...selectedThreadIds.value, threadId]
+}
+
+const selectVisibleThreads = () => {
+  selectedThreadIds.value = threads.value.map((thread) => thread.id)
+}
+
+const clearThreadSelection = () => {
+  selectedThreadIds.value = []
+}
+
+const toggleVisibleSelection = () => {
+  if (allVisibleSelected.value) {
+    clearThreadSelection()
+    return
+  }
+  selectVisibleThreads()
+}
+
+const applyBatchAction = async (action: EmailThreadBatchAction) => {
+  if (!selectedThreadIds.value.length) return
+  batchLoading.value = true
+  try {
+    await batchEmailThreads({
+      thread_ids: selectedThreadIds.value,
+      action,
+    })
+    await refreshCurrentPage()
+    selectedThreadIds.value = []
+    const labelByAction: Record<EmailThreadBatchAction, string> = {
+      mark_read: 'Marked as read.',
+      mark_unread: 'Marked as unread.',
+      delete: 'Moved to deleted.',
+    }
+    message.success(labelByAction[action])
+  } catch (batchError) {
+    message.error(errorMessage(batchError))
+  } finally {
+    batchLoading.value = false
+  }
+}
+
+const openThread = async (
+  threadId: string,
+  {
+    markRead = true,
+  }: {
+    markRead?: boolean
+  } = {},
+) => {
   detailLoading.value = true
   try {
-    selectedThread.value = await getEmailThread(threadId)
+    selectedThread.value = await getEmailThread(threadId, { markRead })
+    threads.value = threads.value.map((thread) =>
+      thread.id === threadId ? { ...thread, unread: selectedThread.value?.unread ?? false } : thread,
+    )
     syncQueryToRoute()
   } catch (threadError) {
     message.error(errorMessage(threadError))
@@ -167,38 +325,107 @@ const openThread = async (threadId: string) => {
   }
 }
 
-const linkSelectedThread = async () => {
-  if (!selectedThread.value) return
-  if (!selectedCampaignId.value && !selectedDealId.value) {
-    message.error('Select a campaign or deal before linking.')
-    return
-  }
+const loadLinkDeals = async (campaignId?: string) => {
+  linkDeals.value = []
+  linkDealId.value = undefined
+  if (!campaignId) return
+  linkDealsLoading.value = true
   try {
-    await linkEmailThread(selectedThread.value.id, {
-      campaign_id: selectedCampaignId.value,
-      deal_id: selectedDealId.value,
-    })
-    selectedThread.value = await getEmailThread(selectedThread.value.id)
-    await loadThreads()
-    message.success('Thread linked.')
-  } catch (linkError) {
-    message.error(errorMessage(linkError))
+    linkDeals.value = (await listCampaignDeals(campaignId)).deals
+  } catch (dealError) {
+    message.error(errorMessage(dealError))
+  } finally {
+    linkDealsLoading.value = false
   }
 }
 
-const unlink = async (link: EmailCrmLink) => {
+const openLinkModal = async () => {
   if (!selectedThread.value) return
-  try {
+  const dealLink = selectedThread.value.crm_links.find((link) => link.type === 'deal')
+  const campaignLink = selectedThread.value.crm_links.find((link) => link.type === 'campaign')
+  linkCampaignId.value =
+    dealLink?.campaign_id ?? campaignLink?.campaign_id ?? selectedCampaignId.value
+  linkModalOpen.value = true
+  await loadLinkDeals(linkCampaignId.value)
+  linkDealId.value = dealLink?.deal_id ?? selectedDealId.value
+  if (linkDealId.value && !linkDeals.value.some((deal) => deal.id === linkDealId.value)) {
+    linkDealId.value = undefined
+  }
+}
+
+const unlinkExistingThreadLinks = async () => {
+  if (!selectedThread.value) return
+  const links = [...selectedThread.value.crm_links].sort((left, right) => {
+    if (left.type === right.type) return 0
+    return left.type === 'deal' ? -1 : 1
+  })
+  for (const link of links) {
     await unlinkEmailThread(selectedThread.value.id, {
-      campaignId: link.campaign_id ?? undefined,
-      dealId: link.deal_id ?? undefined,
+      campaignId: link.type === 'campaign' ? link.campaign_id ?? undefined : undefined,
+      dealId: link.type === 'deal' ? link.deal_id ?? undefined : undefined,
+    })
+  }
+}
+
+const saveThreadLinks = async () => {
+  if (!selectedThread.value) return
+  if (!linkCampaignId.value) {
+    message.error('Select a campaign before linking.')
+    return
+  }
+  linkSaving.value = true
+  try {
+    await unlinkExistingThreadLinks()
+    await linkEmailThread(selectedThread.value.id, {
+      campaign_id: linkCampaignId.value,
+      deal_id: linkDealId.value,
     })
     selectedThread.value = await getEmailThread(selectedThread.value.id)
-    await loadThreads()
-    message.success('Thread unlinked.')
-  } catch (unlinkError) {
-    message.error(errorMessage(unlinkError))
+    await refreshCurrentPage()
+    linkModalOpen.value = false
+    message.success('Thread linked.')
+  } catch (linkError) {
+    message.error(errorMessage(linkError))
+  } finally {
+    linkSaving.value = false
   }
+}
+
+const clearThreadLinks = async () => {
+  if (!selectedThread.value) return
+  linkSaving.value = true
+  try {
+    await unlinkExistingThreadLinks()
+    selectedThread.value = await getEmailThread(selectedThread.value.id)
+    await refreshCurrentPage()
+    linkModalOpen.value = false
+    message.success('Thread links cleared.')
+  } catch (linkError) {
+    message.error(errorMessage(linkError))
+  } finally {
+    linkSaving.value = false
+  }
+}
+
+const changeLinkCampaign = async (campaignId?: string) => {
+  linkCampaignId.value = campaignId
+  await loadLinkDeals(campaignId)
+}
+
+const cancelLinkModal = () => {
+  linkModalOpen.value = false
+  linkCampaignId.value = undefined
+  linkDealId.value = undefined
+  linkDeals.value = []
+}
+
+const linkButtonLabel = () => {
+  if (!selectedThread.value) return 'Link to campaign/deal'
+  return selectedThreadHasLinks.value ? 'Edit campaign/deal link' : 'Link to campaign/deal'
+}
+
+const linkModalTitle = () => {
+  return selectedThreadHasLinks.value ? 'Edit campaign/deal link' : 'Link to campaign/deal'
 }
 
 const participantLabel = (thread: GmailThreadSummary) => {
@@ -217,19 +444,63 @@ const formatDate = (value?: string | null) => {
 }
 
 const threadLinkLabel = (link: EmailCrmLink) => {
-  if (link.type === 'campaign') return 'Campaign'
-  if (link.type === 'deal') return 'Deal'
+  if (link.type === 'campaign') {
+    return link.campaign_name ? `Campaign: ${link.campaign_name}` : 'Campaign'
+  }
+  if (link.type === 'deal') {
+    return link.deal_influencer_name ? `Deal: ${link.deal_influencer_name}` : 'Deal'
+  }
   return link.type
+}
+
+const emailReaderCss = `
+  html, body {
+    margin: 0;
+    background: #ffffff;
+    color: #20262d;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+  }
+  body {
+    padding: 0;
+  }
+  img, video {
+    max-width: 100%;
+    height: auto;
+  }
+  table {
+    max-width: 100%;
+  }
+  a {
+    color: #1a73e8;
+  }
+`
+
+const emailHeadContent = `<base target="_blank"><style>${emailReaderCss}</style>`
+
+const emailHtmlSrcdoc = (html: string) => {
+  if (/<head(\s[^>]*)?>/i.test(html)) {
+    return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${emailHeadContent}`)
+  }
+  if (/<html(\s[^>]*)?>/i.test(html)) {
+    return html.replace(
+      /<html(\s[^>]*)?>/i,
+      (match) => `${match}<head>${emailHeadContent}</head>`,
+    )
+  }
+  return `<!doctype html><html><head>${emailHeadContent}</head><body>${html}</body></html>`
 }
 
 watch(selectedCampaignId, async () => {
   selectedDealId.value = undefined
   await loadDeals()
-  await loadThreads()
+  await resetThreadPagination()
 })
 
-watch([selectedDealId, selectedLabel], async () => {
-  await loadThreads()
+watch([selectedMailView, selectedDealId, selectedLabel], async () => {
+  await resetThreadPagination()
 })
 
 onMounted(async () => {
@@ -239,7 +510,7 @@ onMounted(async () => {
     if (connected.value) {
       await loadLabels()
       const threadId = route.query.threadId as string | undefined
-      await loadThreads()
+      await resetThreadPagination()
       if (threadId) await openThread(threadId)
     }
   } catch (pageError) {
@@ -258,30 +529,60 @@ onMounted(async () => {
       <a-space>
         <a-tag v-if="connected" color="green">{{ authStatus?.email }}</a-tag>
         <a-button v-if="connected" :loading="authLoading" @click="disconnect">Disconnect</a-button>
-        <a-button v-else type="primary" :loading="authLoading" @click="connectGmail">
-          Connect Gmail
-        </a-button>
       </a-space>
     </div>
 
-    <a-alert
-      v-if="!connected"
-      type="info"
-      show-icon
-      message="Connect Gmail"
-      description="Desktop IRM stores only the local OAuth credential. Threads and CRM links stay in Gmail labels."
-    />
+    <section v-if="!connected" class="google-auth-panel">
+      <div>
+        <h2>Sign in to Gmail</h2>
+        <p>Use your Google account to load Gmail threads and apply CreatorFlow campaign labels.</p>
+      </div>
+      <button
+        class="google-login-button"
+        type="button"
+        :disabled="authLoading"
+        @click="connectGmail"
+      >
+        <span class="google-icon" aria-hidden="true">
+          <svg viewBox="0 0 18 18" focusable="false">
+            <path
+              fill="#4285f4"
+              d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z"
+            />
+            <path
+              fill="#34a853"
+              d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.81.54-1.84.86-3.05.86-2.35 0-4.34-1.58-5.05-3.71H.94v2.33A9 9 0 0 0 9 18z"
+            />
+            <path
+              fill="#fbbc05"
+              d="M3.95 10.71a5.41 5.41 0 0 1 0-3.42V4.96H.94a9 9 0 0 0 0 8.08l3.01-2.33z"
+            />
+            <path
+              fill="#ea4335"
+              d="M9 3.58c1.32 0 2.5.45 3.43 1.35l2.58-2.58A8.65 8.65 0 0 0 9 0 9 9 0 0 0 .94 4.96l3.01 2.33C4.66 5.16 6.65 3.58 9 3.58z"
+            />
+          </svg>
+        </span>
+        <span>{{ authLoading ? 'Opening Google...' : 'Sign in with Google' }}</span>
+      </button>
+    </section>
 
     <a-alert v-if="error" class="page-alert" type="error" show-icon :message="error" />
 
     <template v-if="connected">
+      <a-segmented
+        v-model:value="selectedMailView"
+        class="mail-view-tabs"
+        :options="mailViews"
+      />
+
       <div class="filters">
         <a-input-search
           v-model:value="query"
           class="query-input"
           placeholder="Search Gmail"
           enter-button="Search"
-          @search="() => loadThreads()"
+          @search="resetThreadPagination"
         />
         <a-select
           v-model:value="selectedCampaignId"
@@ -311,32 +612,90 @@ onMounted(async () => {
       <div class="email-workspace">
         <a-card class="thread-list-card" :body-style="{ padding: 0 }">
           <div class="thread-list-header">
-            <strong>Threads</strong>
-            <a-button size="small" :loading="loading" @click="() => loadThreads()">Refresh</a-button>
+            <div class="thread-list-title">
+              <strong>Threads</strong>
+              <span>{{ threadRangeLabel }}</span>
+            </div>
+            <a-space>
+              <a-button size="small" :disabled="!hasPreviousPage || loading" @click="loadPreviousPage">
+                Prev
+              </a-button>
+              <a-button size="small" :disabled="!hasNextPage || loading" @click="loadNextPage">
+                Next
+              </a-button>
+              <a-button size="small" :loading="loading" @click="refreshCurrentPage">Refresh</a-button>
+            </a-space>
           </div>
-          <a-list :loading="loading" :data-source="threads" item-layout="vertical">
-            <template #renderItem="{ item }">
-              <a-list-item
-                class="thread-row"
-                :class="{ active: item.id === selectedThreadId }"
-                @click="openThread(item.id)"
+          <div class="batch-toolbar">
+            <a-checkbox
+              :checked="allVisibleSelected"
+              :indeterminate="selectedVisibleCount > 0 && !allVisibleSelected"
+              :disabled="!threads.length || loading || batchLoading"
+              @change="toggleVisibleSelection"
+            >
+              {{ selectedThreadIds.length ? `${selectedThreadIds.length} selected` : 'Select visible' }}
+            </a-checkbox>
+            <a-space>
+              <a-button
+                size="small"
+                :disabled="!hasSelectedThreads || batchLoading"
+                @click="applyBatchAction('mark_read')"
               >
-                <div class="thread-row-top">
-                  <strong>{{ participantLabel(item) }}</strong>
-                  <span>{{ formatDate(item.last_message_at) }}</span>
-                </div>
-                <div class="thread-subject">{{ item.subject || '(No subject)' }}</div>
-                <p>{{ item.snippet }}</p>
-                <div v-if="item.crm_links.length" class="tag-row">
-                  <a-tag v-for="link in item.crm_links" :key="link.label_id">
-                    {{ threadLinkLabel(link) }}
-                  </a-tag>
-                </div>
-              </a-list-item>
-            </template>
-          </a-list>
-          <div class="load-more" v-if="nextPageToken">
-            <a-button :loading="loading" @click="loadThreads(nextPageToken)">Load more</a-button>
+                Mark read
+              </a-button>
+              <a-button
+                size="small"
+                :disabled="!hasSelectedThreads || batchLoading"
+                @click="applyBatchAction('mark_unread')"
+              >
+                Mark unread
+              </a-button>
+              <a-button
+                danger
+                size="small"
+                :disabled="!hasSelectedThreads || batchLoading"
+                :loading="batchLoading"
+                @click="applyBatchAction('delete')"
+              >
+                Delete
+              </a-button>
+              <a-button
+                size="small"
+                :disabled="!hasSelectedThreads || batchLoading"
+                @click="clearThreadSelection"
+              >
+                Clear
+              </a-button>
+            </a-space>
+          </div>
+          <div class="thread-list-scroll">
+            <a-list :loading="loading" :data-source="threads" item-layout="vertical">
+              <template #renderItem="{ item }">
+                <a-list-item
+                  class="thread-row"
+                  :class="{ active: item.id === selectedThreadId, unread: item.unread }"
+                  @click="openThread(item.id)"
+                >
+                  <a-checkbox
+                    class="thread-select"
+                    :checked="selectedThreadIdSet.has(item.id)"
+                    @click.stop
+                    @change="toggleThreadSelection(item.id)"
+                  />
+                  <div class="thread-row-top">
+                    <strong>{{ participantLabel(item) }}</strong>
+                    <span>{{ formatDate(item.last_message_at) }}</span>
+                  </div>
+                  <div class="thread-subject">{{ item.subject || '(No subject)' }}</div>
+                  <p>{{ item.snippet }}</p>
+                  <div v-if="item.crm_links.length" class="tag-row">
+                    <a-tag v-for="link in item.crm_links" :key="link.label_id">
+                      {{ threadLinkLabel(link) }}
+                    </a-tag>
+                  </div>
+                </a-list-item>
+              </template>
+            </a-list>
           </div>
         </a-card>
 
@@ -348,22 +707,12 @@ onMounted(async () => {
                   <h2>{{ selectedThread.subject || '(No subject)' }}</h2>
                   <p>{{ selectedThread.message_count }} messages</p>
                 </div>
-                <a-button type="primary" @click="linkSelectedThread">Link current filter</a-button>
-              </div>
-
-              <div class="link-panel">
-                <strong>CRM labels</strong>
-                <div v-if="selectedThread.crm_links.length" class="tag-row">
-                  <a-tag
-                    v-for="link in selectedThread.crm_links"
-                    :key="link.label_id"
-                    closable
-                    @close.prevent="unlink(link)"
-                  >
-                    {{ threadLinkLabel(link) }}
-                  </a-tag>
+                <div class="header-actions">
+                  <span v-if="selectedThreadHasLinks" class="minimal-link-text">
+                    Linked to: {{ selectedThread.crm_links.map(threadLinkLabel).join(' / ') }}
+                  </span>
+                  <a-button type="primary" @click="openLinkModal">{{ linkButtonLabel() }}</a-button>
                 </div>
-                <span v-else class="muted">No campaign or deal label yet.</span>
               </div>
 
               <div class="message-stack">
@@ -375,13 +724,13 @@ onMounted(async () => {
                     </div>
                     <time>{{ formatDate(mail.sent_at) }}</time>
                   </header>
-                  <pre v-if="mail.body_text">{{ mail.body_text }}</pre>
                   <iframe
-                    v-else-if="mail.body_html"
-                    sandbox=""
+                    v-if="mail.body_html"
+                    sandbox="allow-popups allow-popups-to-escape-sandbox"
                     class="html-frame"
-                    :srcdoc="mail.body_html"
+                    :srcdoc="emailHtmlSrcdoc(mail.body_html)"
                   />
+                  <pre v-else-if="mail.body_text">{{ mail.body_text }}</pre>
                   <p v-else class="muted">{{ mail.snippet || 'No readable message body.' }}</p>
                 </article>
               </div>
@@ -391,6 +740,55 @@ onMounted(async () => {
         </a-card>
       </div>
     </template>
+
+    <a-modal
+      v-model:open="linkModalOpen"
+      :title="linkModalTitle()"
+      :confirm-loading="linkSaving"
+      :ok-button-props="{ disabled: !linkCampaignId || linkSaving }"
+      ok-text="Save link"
+      @ok="saveThreadLinks"
+      @cancel="cancelLinkModal"
+    >
+      <a-form layout="vertical">
+        <a-form-item label="Campaign" required>
+          <a-select
+            v-model:value="linkCampaignId"
+            show-search
+            placeholder="Select campaign"
+            :options="campaignOptions"
+            :filter-option="true"
+            @change="changeLinkCampaign"
+          />
+        </a-form-item>
+        <a-form-item label="Deal">
+          <a-select
+            v-model:value="linkDealId"
+            allow-clear
+            show-search
+            placeholder="Campaign only"
+            :disabled="!linkCampaignId"
+            :loading="linkDealsLoading"
+            :options="linkDealOptions"
+            :filter-option="true"
+          />
+        </a-form-item>
+      </a-form>
+      <template #footer>
+        <a-button v-if="selectedThreadHasLinks" danger :loading="linkSaving" @click="clearThreadLinks">
+          Clear link
+        </a-button>
+        <a-button @click="cancelLinkModal">Cancel</a-button>
+        <a-button
+          type="primary"
+          :disabled="!linkCampaignId || linkSaving"
+          :loading="linkSaving"
+          @click="saveThreadLinks"
+        >
+          Save link
+        </a-button>
+      </template>
+    </a-modal>
   </section>
 </template>
 
@@ -421,6 +819,85 @@ onMounted(async () => {
   color: #697582;
 }
 
+.google-login-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 220px;
+  height: 44px;
+  padding: 0 18px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #3c4043;
+  box-shadow: 0 1px 2px rgb(60 64 67 / 0.12);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.google-login-button:hover:not(:disabled) {
+  border-color: #d2e3fc;
+  background: #f8fbff;
+  box-shadow:
+    0 1px 2px rgb(60 64 67 / 0.18),
+    0 1px 3px 1px rgb(60 64 67 / 0.08);
+}
+
+.google-login-button:focus-visible {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
+}
+
+.google-login-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.google-icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.google-icon svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.google-auth-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid #e0e5eb;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(32 38 45 / 0.04);
+}
+
+.google-auth-panel h2 {
+  margin: 0;
+  color: #20262d;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.google-auth-panel p {
+  margin: 4px 0 0;
+  color: #697582;
+}
+
 .page-alert {
   margin-top: -4px;
 }
@@ -429,6 +906,12 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.mail-view-tabs {
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .query-input {
@@ -443,6 +926,7 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
   gap: 16px;
+  align-items: start;
   min-height: 660px;
 }
 
@@ -452,31 +936,98 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-.thread-list-header,
+.thread-list-card {
+  height: calc(100vh - 210px);
+  min-height: 520px;
+}
+
 .thread-detail-header,
-.link-panel,
 .message-card header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
 }
 
 .thread-list-header {
+  flex-wrap: wrap;
   padding: 14px 16px;
   border-bottom: 1px solid #edf0f3;
 }
 
+.thread-list-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.thread-list-title span {
+  color: #697582;
+  font-size: 12px;
+}
+
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #edf0f3;
+  background: #ffffff;
+}
+
+.thread-list-scroll {
+  height: calc(100vh - 324px);
+  min-height: 406px;
+  overflow-y: auto;
+}
+
 .thread-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 10px;
+  border-left: 3px solid transparent;
   cursor: pointer;
   padding: 14px 16px;
+}
+
+.thread-select {
+  grid-row: 1 / span 4;
+  padding-top: 2px;
+}
+
+.thread-row.unread {
+  border-left-color: #1a73e8;
+  background: #f4f8ff;
 }
 
 .thread-row.active {
   background: #eef8f4;
 }
 
+.thread-row.active.unread {
+  background: #eaf4ff;
+}
+
+.thread-row:not(.unread) .thread-row-top strong,
+.thread-row:not(.unread) .thread-subject {
+  font-weight: 500;
+}
+
+.thread-row.unread .thread-row-top strong,
+.thread-row.unread .thread-subject {
+  font-weight: 800;
+}
+
 .thread-row-top {
+  grid-column: 2;
   display: flex;
   justify-content: space-between;
   gap: 10px;
@@ -490,9 +1041,15 @@ onMounted(async () => {
 }
 
 .thread-subject {
+  grid-column: 2;
   margin-top: 4px;
   color: #20262d;
   font-weight: 600;
+}
+
+.thread-row p,
+.thread-row .tag-row {
+  grid-column: 2;
 }
 
 .tag-row {
@@ -500,11 +1057,6 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
-}
-
-.load-more {
-  padding: 14px 16px;
-  text-align: center;
 }
 
 .thread-detail-card {
@@ -516,12 +1068,10 @@ onMounted(async () => {
   margin-bottom: 16px;
 }
 
-.link-panel {
-  align-items: flex-start;
-  padding: 12px;
-  border: 1px solid #dce5df;
-  border-radius: 8px;
-  background: #f7fbf9;
+.minimal-link-text {
+  color: #175fcb;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .message-stack {
@@ -561,7 +1111,7 @@ onMounted(async () => {
 
 .html-frame {
   width: 100%;
-  min-height: 260px;
+  height: 520px;
   border: 1px solid #edf0f3;
   border-radius: 8px;
   background: #ffffff;
@@ -574,6 +1124,35 @@ onMounted(async () => {
 
   .filter-select,
   .query-input {
+    width: 100%;
+  }
+
+  .mail-view-tabs {
+    width: 100%;
+  }
+
+  .thread-list-card {
+    height: 560px;
+    min-height: 0;
+  }
+
+  .thread-list-scroll {
+    height: 446px;
+    min-height: 0;
+  }
+
+  .batch-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .page-header,
+  .google-auth-panel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .google-login-button {
     width: 100%;
   }
 }

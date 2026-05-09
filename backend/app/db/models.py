@@ -58,7 +58,7 @@ class Campaign(TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "campaigns"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
-    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     brief: Mapped[str | None] = mapped_column(Text, nullable=True)
     budget: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)

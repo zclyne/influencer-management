@@ -527,64 +527,53 @@ void loadInfluencerDetail()
 
     <a-spin :spinning="loading">
       <template v-if="influencer">
-        <div class="profile-hero">
-          <div class="profile-main">
+        <div class="page-heading">
+          <div>
             <h1>{{ influencer.display_name }}</h1>
-            <p class="profile-summary">
-              {{ influencer.bio || `${locationLabel}. Global profile reused across campaigns.` }}
-            </p>
-            <div v-if="influencer.platforms.length" class="tag-row">
-              <a-tag
-                v-for="platform in influencer.platforms"
-                :key="platform.id"
-                :color="platformColor(platform.platform)"
-              >
-                {{ platformTagLabel(platform) }}
-              </a-tag>
+            <div class="heading-meta">
+              <a-tag v-if="influencer.archived_at" color="red">Deleted</a-tag>
+              <a-tag v-else color="green">Active</a-tag>
+              <span>Updated {{ formatDate(influencer.updated_at) }}</span>
             </div>
-            <span v-else class="muted">No platforms</span>
           </div>
-
-          <div class="profile-side">
-            <a-space>
-              <a-button type="primary" @click="openProfileEdit">Edit</a-button>
-              <a-button
-                danger
-                :disabled="Boolean(influencer.archived_at)"
-                :loading="mutating"
-                @click="confirmArchive"
-              >
-                Delete
-              </a-button>
-            </a-space>
-            <a-descriptions size="small" :column="1">
-              <a-descriptions-item label="Primary contact">
-                {{ primaryContact?.email ?? 'No contact' }}
-              </a-descriptions-item>
-              <a-descriptions-item label="Status">
-                <a-tag v-if="influencer.archived_at" color="default">Deleted</a-tag>
-                <a-tag v-else color="green">Active</a-tag>
-              </a-descriptions-item>
-            </a-descriptions>
+          <div class="page-actions">
+            <a-button
+              danger
+              :disabled="Boolean(influencer.archived_at)"
+              :loading="mutating"
+              @click="confirmArchive"
+            >
+              Delete
+            </a-button>
+            <a-button type="primary" @click="openProfileEdit">Edit profile</a-button>
           </div>
         </div>
 
-        <div class="content-grid">
-          <a-card class="section-card">
-            <template #title>Global profile</template>
-            <a-descriptions size="small" :column="1">
-              <a-descriptions-item label="Full name">
-                {{ influencer.full_name || 'Not set' }}
-              </a-descriptions-item>
-              <a-descriptions-item label="Location">
-                {{ locationLabel }}
-              </a-descriptions-item>
-              <a-descriptions-item label="Updated">
-                {{ formatDate(influencer.updated_at) }}
-              </a-descriptions-item>
-            </a-descriptions>
+        <div class="influencer-overview">
+          <a-card size="small">
+            <span>Full name</span>
+            <strong>{{ influencer.full_name || 'Not set' }}</strong>
           </a-card>
+          <a-card size="small">
+            <span>Location</span>
+            <strong>{{ locationLabel }}</strong>
+          </a-card>
+          <a-card size="small">
+            <span>Primary contact</span>
+            <strong>{{ primaryContact?.email ?? 'No contact' }}</strong>
+          </a-card>
+          <a-card size="small">
+            <span>Platforms</span>
+            <strong>{{ influencer.platforms.length }} linked</strong>
+          </a-card>
+        </div>
 
+        <a-card class="bio-card" size="small">
+          <template #title>Bio</template>
+          <p>{{ influencer.bio || 'No bio yet.' }}</p>
+        </a-card>
+
+        <div class="content-grid">
           <a-card class="section-card">
             <template #title>Notes</template>
             <template #extra>
@@ -924,14 +913,11 @@ void loadInfluencerDetail()
   border-radius: 8px;
 }
 
-.profile-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 24px;
-  padding: 24px 32px;
-  border: 1px solid #dce2ea;
-  border-radius: 8px;
-  background: #ffffff;
+.page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .profile-main,
@@ -941,35 +927,71 @@ void loadInfluencerDetail()
   gap: 14px;
 }
 
-.profile-side {
-  justify-items: end;
-}
-
 h1 {
   margin: 0;
   color: #20262d;
-  font-size: 32px;
+  font-size: 30px;
   line-height: 1.2;
 }
 
-.profile-summary,
+.heading-meta,
+.page-actions,
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.heading-meta {
+  margin-top: 10px;
+  color: #58636f;
+}
+
+.page-actions {
+  justify-content: flex-end;
+}
+
+.influencer-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.influencer-overview :deep(.ant-card-body) {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.influencer-overview span {
+  color: #697582;
+}
+
+.influencer-overview strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #20262d;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.bio-card p {
+  margin: 0;
+  color: #3f4954;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
 .cell-note,
 .muted {
   color: #697582;
 }
 
-.profile-summary,
 .cell-note,
 .cell-warning {
   margin: 0;
   line-height: 1.5;
-}
-
-.tag-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .content-grid {
@@ -1033,16 +1055,21 @@ h1 {
 }
 
 @media (max-width: 980px) {
-  .profile-hero,
+  .influencer-overview {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   .content-grid {
     grid-template-columns: 1fr;
   }
 
-  .profile-side {
-    justify-items: start;
-  }
-
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .influencer-overview {
     grid-template-columns: 1fr;
   }
 }
