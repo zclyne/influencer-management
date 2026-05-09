@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
+import { Plus, Trash2 } from '@lucide/vue'
 import type { CampaignCreateRequest, CampaignResponse, CampaignStatus } from '../api/types'
 import { normalizeTags } from '../shared/tags'
 import { campaignStatusLabels, campaignStatuses, useCampaigns } from './useCampaigns'
@@ -236,7 +237,10 @@ void loadCampaigns()
   <section class="campaign-list-page">
     <div class="page-heading">
       <div>
-        <h1>Campaign list</h1>
+        <a-breadcrumb>
+          <a-breadcrumb-item>Campaigns</a-breadcrumb-item>
+        </a-breadcrumb>
+        <h1>Campaigns</h1>
         <p class="page-description">
           Open campaigns to manage deals, add influencers from the library, and use campaign-scoped export.
         </p>
@@ -299,9 +303,13 @@ void loadCampaigns()
             :loading="archiving"
             @click="confirmBulkArchive"
           >
+            <Trash2 class="button-leading-icon" aria-hidden="true" />
             Delete selected
           </a-button>
-          <a-button type="primary" @click="openCreateModal">New campaign</a-button>
+          <a-button type="primary" @click="openCreateModal">
+            <Plus class="button-leading-icon" aria-hidden="true" />
+            New campaign
+          </a-button>
         </div>
       </div>
 
@@ -363,7 +371,15 @@ void loadCampaigns()
               cancel-text="Cancel"
               @confirm="archiveOne(record)"
             >
-              <a-button danger type="link">Delete</a-button>
+              <a-button
+                class="table-action-icon"
+                danger
+                type="text"
+                title="Delete campaign"
+                aria-label="Delete campaign"
+              >
+                <Trash2 aria-hidden="true" />
+              </a-button>
             </a-popconfirm>
             <span v-else class="muted">Deleted</span>
           </template>
@@ -457,10 +473,35 @@ void loadCampaigns()
   gap: 16px;
 }
 
+.page-heading :deep(.ant-breadcrumb) {
+  margin-bottom: 8px;
+}
+
 h1 {
   margin: 0;
   color: #20262d;
   font-size: 30px;
+}
+
+.button-leading-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -3px;
+}
+
+.table-action-icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-action-icon :deep(svg) {
+  width: 16px;
+  height: 16px;
 }
 
 .page-description {

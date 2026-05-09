@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
+import { Pencil, Plus, Trash2 } from '@lucide/vue'
 import type { BrandCreateRequest, BrandResponse, BrandUpdateRequest } from '../api/types'
 import { useBrands } from './useBrands'
 
@@ -182,7 +183,10 @@ void loadBrands()
   <section class="brand-list-page">
     <div class="page-heading">
       <div>
-        <h1>Brand list</h1>
+        <a-breadcrumb>
+          <a-breadcrumb-item>Brands</a-breadcrumb-item>
+        </a-breadcrumb>
+        <h1>Brands</h1>
         <p class="page-description">
           Manage standalone brand records that can be associated with campaigns.
         </p>
@@ -227,9 +231,13 @@ void loadBrands()
             :loading="archiving"
             @click="confirmBulkArchive"
           >
+            <Trash2 class="button-leading-icon" aria-hidden="true" />
             Delete selected
           </a-button>
-          <a-button type="primary" @click="openCreateModal">New brand</a-button>
+          <a-button type="primary" @click="openCreateModal">
+            <Plus class="button-leading-icon" aria-hidden="true" />
+            New brand
+          </a-button>
         </div>
       </div>
 
@@ -268,16 +276,32 @@ void loadBrands()
 
           <template v-else-if="column.key === 'actions'">
             <div class="action-row">
-              <a-button type="link" @click="openEditModal(record)">Edit</a-button>
-            <a-popconfirm
-              v-if="!record.archived_at"
-              title="Delete this brand?"
-              ok-text="Delete"
-              cancel-text="Cancel"
-              @confirm="archiveOne(record)"
-            >
-              <a-button danger type="link">Delete</a-button>
-            </a-popconfirm>
+              <a-button
+                class="table-action-icon"
+                type="text"
+                title="Edit brand"
+                aria-label="Edit brand"
+                @click="openEditModal(record)"
+              >
+                <Pencil aria-hidden="true" />
+              </a-button>
+              <a-popconfirm
+                v-if="!record.archived_at"
+                title="Delete this brand?"
+                ok-text="Delete"
+                cancel-text="Cancel"
+                @confirm="archiveOne(record)"
+              >
+                <a-button
+                  class="table-action-icon"
+                  danger
+                  type="text"
+                  title="Delete brand"
+                  aria-label="Delete brand"
+                >
+                  <Trash2 aria-hidden="true" />
+                </a-button>
+              </a-popconfirm>
               <span v-else class="muted">Deleted</span>
             </div>
           </template>
@@ -328,10 +352,35 @@ void loadBrands()
   gap: 16px;
 }
 
+.page-heading :deep(.ant-breadcrumb) {
+  margin-bottom: 8px;
+}
+
 h1 {
   margin: 0;
   color: #20262d;
   font-size: 30px;
+}
+
+.button-leading-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -3px;
+}
+
+.table-action-icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-action-icon :deep(svg) {
+  width: 16px;
+  height: 16px;
 }
 
 .page-description {

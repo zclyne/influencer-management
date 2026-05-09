@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
+import { Pencil, Plus, Trash2 } from '@lucide/vue'
 import type {
   CompensationItemResponse,
   CompensationItemStatus,
@@ -520,13 +521,17 @@ void loadDealDetail()
             <RouterLink :to="{ name: 'email', query: { campaignId, dealId } }">
               <a-button>Open email</a-button>
             </RouterLink>
-            <a-button type="primary" @click="openDealEdit">Edit deal</a-button>
+            <a-button type="primary" @click="openDealEdit">
+              <Pencil class="button-leading-icon" aria-hidden="true" />
+              Edit deal
+            </a-button>
             <a-button
               danger
               :disabled="Boolean(deal.archived_at)"
               :loading="mutating"
               @click="confirmArchive"
             >
+              <Trash2 class="button-leading-icon" aria-hidden="true" />
               Delete deal
             </a-button>
           </div>
@@ -598,7 +603,10 @@ void loadDealDetail()
           <a-card class="section-card">
             <template #title>Tags</template>
             <template #extra>
-              <a-button @click="openTagsEdit">Edit</a-button>
+              <a-button @click="openTagsEdit">
+                <Pencil class="button-leading-icon" aria-hidden="true" />
+                Edit
+              </a-button>
             </template>
             <div v-if="deal.labels.length" class="tag-row">
               <a-tag v-for="tag in deal.labels" :key="tag">{{ tag }}</a-tag>
@@ -609,7 +617,10 @@ void loadDealDetail()
           <a-card class="section-card">
             <template #title>Deliverables</template>
             <template #extra>
-              <a-button @click="openCreateDeliverable">Add item</a-button>
+              <a-button @click="openCreateDeliverable">
+                <Plus class="button-leading-icon" aria-hidden="true" />
+                Add item
+              </a-button>
             </template>
             <a-table
               :columns="deliverableColumns"
@@ -638,14 +649,30 @@ void loadDealDetail()
                 </template>
                 <template v-else-if="column.key === 'actions'">
                   <a-space>
-                    <a-button type="link" @click="openEditDeliverable(record)">Edit</a-button>
+                    <a-button
+                      class="table-action-icon"
+                      type="text"
+                      title="Edit deliverable"
+                      aria-label="Edit deliverable"
+                      @click="openEditDeliverable(record)"
+                    >
+                      <Pencil aria-hidden="true" />
+                    </a-button>
                     <a-popconfirm
                       title="Delete this deliverable?"
                       ok-text="Delete"
                       cancel-text="Cancel"
                       @confirm="removeDeliverable(record)"
                     >
-                      <a-button danger type="link">Delete</a-button>
+                      <a-button
+                        class="table-action-icon"
+                        danger
+                        type="text"
+                        title="Delete deliverable"
+                        aria-label="Delete deliverable"
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </a-button>
                     </a-popconfirm>
                   </a-space>
                 </template>
@@ -656,7 +683,10 @@ void loadDealDetail()
           <a-card class="section-card">
             <template #title>Compensation</template>
             <template #extra>
-              <a-button @click="openCreateCompensation">Add item</a-button>
+              <a-button @click="openCreateCompensation">
+                <Plus class="button-leading-icon" aria-hidden="true" />
+                Add item
+              </a-button>
             </template>
             <a-table
               :columns="compensationColumns"
@@ -682,14 +712,30 @@ void loadDealDetail()
                 </template>
                 <template v-else-if="column.key === 'actions'">
                   <a-space>
-                    <a-button type="link" @click="openEditCompensation(record)">Edit</a-button>
+                    <a-button
+                      class="table-action-icon"
+                      type="text"
+                      title="Edit compensation item"
+                      aria-label="Edit compensation item"
+                      @click="openEditCompensation(record)"
+                    >
+                      <Pencil aria-hidden="true" />
+                    </a-button>
                     <a-popconfirm
                       title="Delete this compensation item?"
                       ok-text="Delete"
                       cancel-text="Cancel"
                       @confirm="removeCompensationItem(record)"
                     >
-                      <a-button danger type="link">Delete</a-button>
+                      <a-button
+                        class="table-action-icon"
+                        danger
+                        type="text"
+                        title="Delete compensation item"
+                        aria-label="Delete compensation item"
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </a-button>
                     </a-popconfirm>
                   </a-space>
                 </template>
@@ -706,7 +752,10 @@ void loadDealDetail()
               <p class="notes">{{ deal.internal_notes || 'No internal notes yet.' }}</p>
             </a-card>
             <div class="section-actions">
-              <a-button @click="openDealEdit">Edit notes</a-button>
+              <a-button @click="openDealEdit">
+                <Pencil class="button-leading-icon" aria-hidden="true" />
+                Edit notes
+              </a-button>
               <a-tooltip title="Deal-scoped file attachment API is not implemented yet.">
                 <a-button disabled>Attach file</a-button>
               </a-tooltip>
@@ -893,6 +942,27 @@ h2 {
 
 h1 {
   font-size: 30px;
+}
+
+.button-leading-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -3px;
+}
+
+.table-action-icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-action-icon :deep(svg) {
+  width: 16px;
+  height: 16px;
 }
 
 h2 {

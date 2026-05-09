@@ -3,6 +3,15 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
+  ChevronLeft,
+  ChevronRight,
+  MailCheck,
+  MailOpen,
+  Pencil,
+  RefreshCw,
+  Trash2,
+} from '@lucide/vue'
+import {
   batchEmailThreads,
   disconnectEmail,
   errorMessage,
@@ -23,6 +32,7 @@ import type {
   EmailThreadBatchAction,
   GmailAuthStatusResponse,
   GmailLabelResponse,
+  GmailMessageResponse,
   GmailThreadDetailResponse,
   GmailThreadSummary,
 } from '../api/types'
@@ -60,6 +70,7 @@ const selectedCampaignId = ref<string | undefined>(route.query.campaignId as str
 const selectedDealId = ref<string | undefined>(route.query.dealId as string | undefined)
 const selectedLabel = ref<string | undefined>()
 const selectedThreadIds = ref<string[]>([])
+const expandedQuotedMessageIds = ref<Set<string>>(new Set())
 const query = ref('')
 const loading = ref(false)
 const detailLoading = ref(false)
@@ -101,6 +112,15 @@ const labelOptions = computed(() =>
 )
 
 const selectedThreadId = computed(() => selectedThread.value?.id ?? (route.query.threadId as string | undefined))
+
+const gmailThreadUrl = computed(() => {
+  if (!selectedThread.value?.id) return null
+  const threadId = encodeURIComponent(selectedThread.value.id)
+  if (authStatus.value?.email) {
+    return `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(authStatus.value.email)}#all/${threadId}`
+  }
+  return `https://mail.google.com/mail/u/0/#all/${threadId}`
+})
 
 const threadRangeLabel = computed(() => {
   if (!threads.value.length) return '0'
@@ -314,6 +334,7 @@ const openThread = async (
   detailLoading.value = true
   try {
     selectedThread.value = await getEmailThread(threadId, { markRead })
+    expandedQuotedMessageIds.value = new Set()
     threads.value = threads.value.map((thread) =>
       thread.id === threadId ? { ...thread, unread: selectedThread.value?.unread ?? false } : thread,
     )
@@ -453,6 +474,78 @@ const threadLinkLabel = (link: EmailCrmLink) => {
   return link.type
 }
 
+const quotedHtmlSelectors = [
+  '.gmail_quote',
+  '.gmail_attr',
+  '.yahoo_quoted',
+  '.protonmail_quote',
+  '.moz-cite-prefix',
+  'blockquote[type="cite"]',
+  '[id^="divRplyFwdMsg"]',
+  '[class*="gmail_quote"]',
+].join(',')
+
+const normalizeBodyForComparison = (value: string) => value.replace(/\s+/g, ' ').trim()
+
+const strippedHtmlBody = (html: string) => {
+  if (typeof DOMParser === 'undefined') return { body: html, stripped: false }
+
+  const document = new DOMParser().parseFromString(html, 'text/html')
+  const quotedNodes = Array.from(document.querySelectorAll(quotedHtmlSelectors))
+  quotedNodes.forEach((node) => node.remove())
+  const body = document.documentElement.outerHTML
+  const stripped =
+    quotedNodes.length > 0 && normalizeBodyForComparison(body) !== normalizeBodyForComparison(html)
+  return { body: stripped ? body : html, stripped }
+}
+
+const strippedTextBody = (text: string) => {
+  const quotePatterns = [
+    /(^|\n)On .{1,500}wrote:\s*(\n|$)/i,
+    /(^|\n)-{2,}\s*Original Message\s*-{2,}/i,
+    /(^|\n)Begin forwarded message:/i,
+    /(^|\n)From:\s.+\n(?:Sent|Date):\s.+\nTo:\s.+(?:\nSubject:\s.+)?/i,
+  ]
+  const quoteStart = quotePatterns.reduce<number | null>((earliest, pattern) => {
+    const match = pattern.exec(text)
+    if (!match) return earliest
+    const index = match.index + (match[1]?.length ?? 0)
+    return earliest === null ? index : Math.min(earliest, index)
+  }, null)
+  if (quoteStart === null) return { body: text, stripped: false }
+
+  const body = text.slice(0, quoteStart).trimEnd()
+  return { body: body || text, stripped: Boolean(body) }
+}
+
+const quotedTextExpanded = (messageId: string) => expandedQuotedMessageIds.value.has(messageId)
+
+const toggleQuotedText = (messageId: string) => {
+  const next = new Set(expandedQuotedMessageIds.value)
+  if (next.has(messageId)) {
+    next.delete(messageId)
+  } else {
+    next.add(messageId)
+  }
+  expandedQuotedMessageIds.value = next
+}
+
+const displayMessageHtml = (mail: GmailMessageResponse) => {
+  if (!mail.body_html || quotedTextExpanded(mail.id)) return mail.body_html ?? ''
+  return strippedHtmlBody(mail.body_html).body
+}
+
+const displayMessageText = (mail: GmailMessageResponse) => {
+  if (!mail.body_text || quotedTextExpanded(mail.id)) return mail.body_text ?? ''
+  return strippedTextBody(mail.body_text).body
+}
+
+const hasQuotedContent = (mail: GmailMessageResponse) => {
+  if (mail.body_html && strippedHtmlBody(mail.body_html).stripped) return true
+  if (mail.body_text && strippedTextBody(mail.body_text).stripped) return true
+  return false
+}
+
 const emailReaderCss = `
   html, body {
     margin: 0;
@@ -523,7 +616,7 @@ onMounted(async () => {
   <section class="email-page">
     <div class="page-header">
       <div>
-        <h1>Email</h1>
+        <h1>Emails</h1>
         <p>Gmail threads with campaign and deal labels.</p>
       </div>
       <a-space>
@@ -616,15 +709,41 @@ onMounted(async () => {
               <strong>Threads</strong>
               <span>{{ threadRangeLabel }}</span>
             </div>
-            <a-space>
-              <a-button size="small" :disabled="!hasPreviousPage || loading" @click="loadPreviousPage">
-                Prev
+            <div class="thread-list-nav" aria-label="Thread list navigation">
+              <a-button
+                class="icon-button"
+                size="small"
+                type="text"
+                title="Previous page"
+                aria-label="Previous page"
+                :disabled="!hasPreviousPage || loading"
+                @click="loadPreviousPage"
+              >
+                <ChevronLeft aria-hidden="true" />
               </a-button>
-              <a-button size="small" :disabled="!hasNextPage || loading" @click="loadNextPage">
-                Next
+              <a-button
+                class="icon-button"
+                size="small"
+                type="text"
+                title="Next page"
+                aria-label="Next page"
+                :disabled="!hasNextPage || loading"
+                @click="loadNextPage"
+              >
+                <ChevronRight aria-hidden="true" />
               </a-button>
-              <a-button size="small" :loading="loading" @click="refreshCurrentPage">Refresh</a-button>
-            </a-space>
+              <a-button
+                class="icon-button"
+                size="small"
+                type="text"
+                title="Refresh"
+                aria-label="Refresh"
+                :disabled="loading"
+                @click="refreshCurrentPage"
+              >
+                <RefreshCw aria-hidden="true" />
+              </a-button>
+            </div>
           </div>
           <div class="batch-toolbar">
             <a-checkbox
@@ -633,38 +752,43 @@ onMounted(async () => {
               :disabled="!threads.length || loading || batchLoading"
               @change="toggleVisibleSelection"
             >
-              {{ selectedThreadIds.length ? `${selectedThreadIds.length} selected` : 'Select visible' }}
+              {{ selectedThreadIds.length ? `${selectedThreadIds.length} selected` : '' }}
             </a-checkbox>
             <a-space>
               <a-button
+                class="icon-button"
                 size="small"
+                type="text"
+                title="Mark read"
+                aria-label="Mark read"
                 :disabled="!hasSelectedThreads || batchLoading"
                 @click="applyBatchAction('mark_read')"
               >
-                Mark read
+                <MailCheck aria-hidden="true" />
               </a-button>
               <a-button
+                class="icon-button"
                 size="small"
+                type="text"
+                title="Mark unread"
+                aria-label="Mark unread"
                 :disabled="!hasSelectedThreads || batchLoading"
                 @click="applyBatchAction('mark_unread')"
               >
-                Mark unread
+                <MailOpen aria-hidden="true" />
               </a-button>
               <a-button
+                class="icon-button"
                 danger
                 size="small"
+                type="text"
+                title="Delete"
+                aria-label="Delete"
                 :disabled="!hasSelectedThreads || batchLoading"
                 :loading="batchLoading"
                 @click="applyBatchAction('delete')"
               >
-                Delete
-              </a-button>
-              <a-button
-                size="small"
-                :disabled="!hasSelectedThreads || batchLoading"
-                @click="clearThreadSelection"
-              >
-                Clear
+                <Trash2 v-if="!batchLoading" aria-hidden="true" />
               </a-button>
             </a-space>
           </div>
@@ -702,16 +826,40 @@ onMounted(async () => {
         <a-card class="thread-detail-card">
           <a-spin :spinning="detailLoading">
             <template v-if="selectedThread">
-              <div class="thread-detail-header">
-                <div>
-                  <h2>{{ selectedThread.subject || '(No subject)' }}</h2>
-                  <p>{{ selectedThread.message_count }} messages</p>
+              <div class="thread-detail-heading">
+                <div v-if="selectedThreadHasLinks" class="thread-link-bar">
+                  <div class="thread-link-status">
+                    <span class="thread-link-label">Linked to</span>
+                    <div class="thread-link-tags">
+                      <a-tag v-for="link in selectedThread.crm_links" :key="link.label_id">
+                        {{ threadLinkLabel(link) }}
+                      </a-tag>
+                    </div>
+                  </div>
+                  <a-button @click="openLinkModal">
+                    <Pencil class="button-leading-icon" aria-hidden="true" />
+                    Edit link
+                  </a-button>
                 </div>
-                <div class="header-actions">
-                  <span v-if="selectedThreadHasLinks" class="minimal-link-text">
-                    Linked to: {{ selectedThread.crm_links.map(threadLinkLabel).join(' / ') }}
-                  </span>
-                  <a-button type="primary" @click="openLinkModal">{{ linkButtonLabel() }}</a-button>
+
+                <div class="thread-detail-header">
+                  <div>
+                    <h2>{{ selectedThread.subject || '(No subject)' }}</h2>
+                    <p>{{ selectedThread.message_count }} messages</p>
+                  </div>
+                  <div class="header-actions">
+                    <a-button
+                      v-if="gmailThreadUrl"
+                      :href="gmailThreadUrl"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Open in Gmail
+                    </a-button>
+                    <a-button v-if="!selectedThreadHasLinks" type="primary" @click="openLinkModal">
+                      {{ linkButtonLabel() }}
+                    </a-button>
+                  </div>
                 </div>
               </div>
 
@@ -728,10 +876,18 @@ onMounted(async () => {
                     v-if="mail.body_html"
                     sandbox="allow-popups allow-popups-to-escape-sandbox"
                     class="html-frame"
-                    :srcdoc="emailHtmlSrcdoc(mail.body_html)"
+                    :srcdoc="emailHtmlSrcdoc(displayMessageHtml(mail))"
                   />
-                  <pre v-else-if="mail.body_text">{{ mail.body_text }}</pre>
+                  <pre v-else-if="mail.body_text">{{ displayMessageText(mail) }}</pre>
                   <p v-else class="muted">{{ mail.snippet || 'No readable message body.' }}</p>
+                  <a-button
+                    v-if="hasQuotedContent(mail)"
+                    class="quoted-toggle"
+                    type="link"
+                    @click="toggleQuotedText(mail.id)"
+                  >
+                    {{ quotedTextExpanded(mail.id) ? 'Hide quoted text' : 'Show quoted text' }}
+                  </a-button>
                 </article>
               </div>
             </template>
@@ -776,6 +932,7 @@ onMounted(async () => {
       </a-form>
       <template #footer>
         <a-button v-if="selectedThreadHasLinks" danger :loading="linkSaving" @click="clearThreadLinks">
+          <Trash2 class="button-leading-icon" aria-hidden="true" />
           Clear link
         </a-button>
         <a-button @click="cancelLinkModal">Cancel</a-button>
@@ -952,12 +1109,61 @@ onMounted(async () => {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   flex-shrink: 0;
 }
 
-.thread-list-header {
+.thread-detail-heading {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.thread-link-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   flex-wrap: wrap;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #dfe4ea;
+  border-radius: 8px;
+  background: #f7f9fb;
+}
+
+.thread-link-status {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.thread-link-label {
+  color: #697582;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.thread-link-tags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.thread-link-tags :deep(.ant-tag) {
+  margin-inline-end: 0;
+}
+
+.thread-list-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
   padding: 14px 16px;
   border-bottom: 1px solid #edf0f3;
 }
@@ -971,6 +1177,39 @@ onMounted(async () => {
 .thread-list-title span {
   color: #697582;
   font-size: 12px;
+}
+
+.thread-list-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.button-leading-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -3px;
+}
+
+.icon-button {
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border: 0;
+  box-shadow: none;
+}
+
+.icon-button :deep(svg) {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
 }
 
 .batch-toolbar {
@@ -1065,13 +1304,6 @@ onMounted(async () => {
 
 .thread-detail-header {
   align-items: flex-start;
-  margin-bottom: 16px;
-}
-
-.minimal-link-text {
-  color: #175fcb;
-  font-size: 14px;
-  font-weight: 500;
 }
 
 .message-stack {
@@ -1107,6 +1339,12 @@ onMounted(async () => {
   font-family: inherit;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+.quoted-toggle {
+  width: fit-content;
+  height: auto;
+  padding: 0;
 }
 
 .html-frame {

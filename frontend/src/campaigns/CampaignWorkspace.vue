@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
+import { Pencil, Plus, Trash2 } from '@lucide/vue'
 import type {
   CampaignStatus,
   CampaignUpdateRequest,
@@ -527,6 +528,7 @@ void loadWorkspace()
         </RouterLink>
         <a-button :loading="exporting" @click="downloadExport">Export view</a-button>
         <a-button type="primary" :disabled="!campaign || Boolean(campaign.archived_at)" @click="openCampaignEdit">
+          <Pencil class="button-leading-icon" aria-hidden="true" />
           Edit campaign
         </a-button>
         <a-button
@@ -535,6 +537,7 @@ void loadWorkspace()
           :loading="mutating"
           @click="confirmCampaignDelete"
         >
+          <Trash2 class="button-leading-icon" aria-hidden="true" />
           Delete campaign
         </a-button>
       </div>
@@ -569,7 +572,10 @@ void loadWorkspace()
     <a-card v-if="campaign" class="campaign-tags-card" size="small">
       <template #title>Tags</template>
       <template #extra>
-        <a-button :disabled="Boolean(campaign.archived_at)" @click="openTagsEdit">Edit</a-button>
+        <a-button :disabled="Boolean(campaign.archived_at)" @click="openTagsEdit">
+          <Pencil class="button-leading-icon" aria-hidden="true" />
+          Edit
+        </a-button>
       </template>
       <div v-if="campaign.tags.length" class="tag-row">
         <a-tag v-for="tag in campaign.tags" :key="tag">{{ tag }}</a-tag>
@@ -607,6 +613,7 @@ void loadWorkspace()
           :disabled="!campaign || Boolean(campaign.archived_at)"
           @click="openAddFromLibrary"
         >
+          <Plus class="button-leading-icon" aria-hidden="true" />
           Add influencers from library
         </a-button>
       </div>
@@ -654,10 +661,11 @@ void loadWorkspace()
             danger
             :disabled="!selectedRowKeys.length || mutating"
             :loading="mutating"
-            @click="confirmBulkArchive"
-          >
-            Delete selected
-          </a-button>
+          @click="confirmBulkArchive"
+        >
+          <Trash2 class="button-leading-icon" aria-hidden="true" />
+          Delete selected
+        </a-button>
         </div>
       </div>
 
@@ -726,7 +734,15 @@ void loadWorkspace()
                 cancel-text="Cancel"
                 @confirm="archiveOne(record)"
               >
-                <a-button danger type="link">Delete</a-button>
+                <a-button
+                  class="table-action-icon"
+                  danger
+                  type="text"
+                  title="Delete deal"
+                  aria-label="Delete deal"
+                >
+                  <Trash2 aria-hidden="true" />
+                </a-button>
               </a-popconfirm>
               <span v-else class="muted">Deleted</span>
             </a-space>
@@ -922,6 +938,27 @@ h1 {
   margin: 0;
   color: #20262d;
   font-size: 30px;
+}
+
+.button-leading-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -3px;
+}
+
+.table-action-icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-action-icon :deep(svg) {
+  width: 16px;
+  height: 16px;
 }
 
 .page-description {

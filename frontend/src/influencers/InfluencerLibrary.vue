@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
+import { Plus, Trash2 } from '@lucide/vue'
 import type {
   CampaignResponse,
   InfluencerListItem,
@@ -327,7 +328,10 @@ void loadInfluencers()
   <section class="influencer-library-page">
     <div class="page-heading">
       <div>
-        <h1>Influencer library</h1>
+        <a-breadcrumb>
+          <a-breadcrumb-item>Influencers</a-breadcrumb-item>
+        </a-breadcrumb>
+        <h1>Influencers</h1>
         <p class="page-description">
           Reuse global creator profiles across campaigns, review platforms, and add new profiles only
           when needed.
@@ -337,7 +341,10 @@ void loadInfluencers()
         <RouterLink :to="{ name: 'influencerImport' }">
           <a-button>Import CSV</a-button>
         </RouterLink>
-        <a-button type="primary" @click="openCreateModal">New influencer</a-button>
+        <a-button type="primary" @click="openCreateModal">
+          <Plus class="button-leading-icon" aria-hidden="true" />
+          New influencer
+        </a-button>
       </div>
     </div>
 
@@ -399,6 +406,7 @@ void loadInfluencers()
             :loading="archiving"
             @click="confirmBulkArchive"
           >
+            <Trash2 class="button-leading-icon" aria-hidden="true" />
             Delete selected
           </a-button>
         </div>
@@ -473,7 +481,15 @@ void loadInfluencers()
               cancel-text="Cancel"
               @confirm="archiveOne(record)"
             >
-              <a-button danger type="link">Delete</a-button>
+              <a-button
+                class="table-action-icon"
+                danger
+                type="text"
+                title="Delete influencer"
+                aria-label="Delete influencer"
+              >
+                <Trash2 aria-hidden="true" />
+              </a-button>
             </a-popconfirm>
             <span v-else class="muted">Deleted</span>
           </template>
@@ -534,10 +550,14 @@ void loadInfluencers()
                 :disabled="createForm.platforms.length === 1 && index === 0"
                 @click="removePlatformRow(platform.key)"
               >
+                <Trash2 class="button-leading-icon" aria-hidden="true" />
                 Remove
               </a-button>
             </div>
-            <a-button type="dashed" block @click="addPlatformRow">Add platform</a-button>
+            <a-button type="dashed" block @click="addPlatformRow">
+              <Plus class="button-leading-icon" aria-hidden="true" />
+              Add platform
+            </a-button>
             <p class="form-help">
               Profile URLs are generated from platform and username, then normalized by the backend.
             </p>
@@ -593,10 +613,35 @@ void loadInfluencers()
   gap: 16px;
 }
 
+.page-heading :deep(.ant-breadcrumb) {
+  margin-bottom: 8px;
+}
+
 h1 {
   margin: 0;
   color: #20262d;
   font-size: 30px;
+}
+
+.button-leading-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -3px;
+}
+
+.table-action-icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-action-icon :deep(svg) {
+  width: 16px;
+  height: 16px;
 }
 
 .page-description {

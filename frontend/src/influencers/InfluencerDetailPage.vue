@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
+import { Pencil, Plus, Trash2 } from '@lucide/vue'
 import type {
   ContactRole,
   InfluencerContactCreateRequest,
@@ -543,9 +544,13 @@ void loadInfluencerDetail()
               :loading="mutating"
               @click="confirmArchive"
             >
+              <Trash2 class="button-leading-icon" aria-hidden="true" />
               Delete
             </a-button>
-            <a-button type="primary" @click="openProfileEdit">Edit profile</a-button>
+            <a-button type="primary" @click="openProfileEdit">
+              <Pencil class="button-leading-icon" aria-hidden="true" />
+              Edit profile
+            </a-button>
           </div>
         </div>
 
@@ -577,7 +582,10 @@ void loadInfluencerDetail()
           <a-card class="section-card">
             <template #title>Notes</template>
             <template #extra>
-              <a-button @click="openNotesEdit">Edit</a-button>
+              <a-button @click="openNotesEdit">
+                <Pencil class="button-leading-icon" aria-hidden="true" />
+                Edit
+              </a-button>
             </template>
             <p v-if="influencer.notes" class="notes-content">{{ influencer.notes }}</p>
             <span v-else class="muted">No notes yet.</span>
@@ -586,7 +594,10 @@ void loadInfluencerDetail()
           <a-card class="section-card">
             <template #title>Tags</template>
             <template #extra>
-              <a-button @click="openTagsEdit">Edit</a-button>
+              <a-button @click="openTagsEdit">
+                <Pencil class="button-leading-icon" aria-hidden="true" />
+                Edit
+              </a-button>
             </template>
             <div v-if="influencer.tags.length" class="tag-row">
               <a-tag v-for="tag in influencer.tags" :key="tag">{{ tag }}</a-tag>
@@ -597,7 +608,10 @@ void loadInfluencerDetail()
           <a-card class="section-card platform-card">
             <template #title>Platform identities</template>
             <template #extra>
-              <a-button @click="openCreatePlatform">Add platform</a-button>
+              <a-button @click="openCreatePlatform">
+                <Plus class="button-leading-icon" aria-hidden="true" />
+                Add platform
+              </a-button>
             </template>
             <a-table
               :columns="platformColumns"
@@ -635,14 +649,30 @@ void loadInfluencerDetail()
                 </template>
                 <template v-else-if="column.key === 'actions'">
                   <a-space>
-                    <a-button type="link" @click="openEditPlatform(record)">Edit</a-button>
+                    <a-button
+                      class="table-action-icon"
+                      type="text"
+                      title="Edit platform"
+                      aria-label="Edit platform"
+                      @click="openEditPlatform(record)"
+                    >
+                      <Pencil aria-hidden="true" />
+                    </a-button>
                     <a-popconfirm
                       title="Delete this platform?"
                       ok-text="Delete"
                       cancel-text="Cancel"
                       @confirm="removePlatform(record)"
                     >
-                      <a-button danger type="link">Delete</a-button>
+                      <a-button
+                        class="table-action-icon"
+                        danger
+                        type="text"
+                        title="Delete platform"
+                        aria-label="Delete platform"
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </a-button>
                     </a-popconfirm>
                   </a-space>
                 </template>
@@ -653,7 +683,10 @@ void loadInfluencerDetail()
           <a-card class="section-card">
             <template #title>Contacts</template>
             <template #extra>
-              <a-button @click="openCreateContact">Add contact</a-button>
+              <a-button @click="openCreateContact">
+                <Plus class="button-leading-icon" aria-hidden="true" />
+                Add contact
+              </a-button>
             </template>
             <a-table
               :columns="contactColumns"
@@ -683,14 +716,30 @@ void loadInfluencerDetail()
                 </template>
                 <template v-else-if="column.key === 'actions'">
                   <a-space>
-                    <a-button type="link" @click="openEditContact(record)">Edit</a-button>
+                    <a-button
+                      class="table-action-icon"
+                      type="text"
+                      title="Edit contact"
+                      aria-label="Edit contact"
+                      @click="openEditContact(record)"
+                    >
+                      <Pencil aria-hidden="true" />
+                    </a-button>
                     <a-popconfirm
                       title="Delete this contact?"
                       ok-text="Delete"
                       cancel-text="Cancel"
                       @confirm="removeContact(record)"
                     >
-                      <a-button danger type="link">Delete</a-button>
+                      <a-button
+                        class="table-action-icon"
+                        danger
+                        type="text"
+                        title="Delete contact"
+                        aria-label="Delete contact"
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </a-button>
                     </a-popconfirm>
                   </a-space>
                 </template>
@@ -932,6 +981,27 @@ h1 {
   color: #20262d;
   font-size: 30px;
   line-height: 1.2;
+}
+
+.button-leading-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -3px;
+}
+
+.table-action-icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-action-icon :deep(svg) {
+  width: 16px;
+  height: 16px;
 }
 
 .heading-meta,
