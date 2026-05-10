@@ -254,18 +254,23 @@ class InfluencerPlatformRepository(SqlAlchemyRepository[models.InfluencerPlatfor
         normalized_profile_url: str | None,
         normalized_username: str | None,
     ) -> models.InfluencerPlatform | None:
+        identity_clauses = []
+        if normalized_profile_url:
+            identity_clauses.append(
+                models.InfluencerPlatform.normalized_profile_url == normalized_profile_url
+            )
+        if normalized_username:
+            identity_clauses.append(
+                models.InfluencerPlatform.normalized_username == normalized_username
+            )
+        if not identity_clauses:
+            return None
+
         clauses = [
             models.InfluencerPlatform.influencer_id == influencer_id,
             models.InfluencerPlatform.platform == platform,
+            or_(*identity_clauses),
         ]
-        if normalized_profile_url:
-            clauses.append(
-                models.InfluencerPlatform.normalized_profile_url == normalized_profile_url
-            )
-        elif normalized_username:
-            clauses.append(models.InfluencerPlatform.normalized_username == normalized_username)
-        else:
-            return None
         return self.db.scalar(select(models.InfluencerPlatform).where(*clauses))
 
     def delete(self, platform: models.InfluencerPlatform) -> None:

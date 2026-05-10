@@ -28,6 +28,11 @@ from app.schemas.influencer_ingestion import (
 from app.services.influencer_ingestion import InfluencerIngestionService
 
 MODASH_EXPORT_FIXTURE = Path(__file__).with_name("modash-export.csv")
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+MOCK_SQL_FIXTURE = BACKEND_ROOT / "dev" / "mock_data.sql"
+MODASH_DEDUP_FIXTURE = BACKEND_ROOT / "dev" / "mock-modash-dedup-import.csv"
+SPRING_SKINCARE_CAMPAIGN_ID = "22222222-2222-2222-2222-222222222221"
+RILEY_BROOKS_ID = "44444444-4444-4444-4444-444444444442"
 
 
 def _preview_input(content: bytes, file_name: str = "modash.csv") -> ImportPreviewInput:
@@ -48,6 +53,55 @@ def _confirm_request(
         rows=[IngestionConfirmRow(row=row, action="create") for row in rows],
         file_name=file_name,
         target_campaign_id=target_campaign_id,
+    )
+
+
+def _confirm_request_with_preview_defaults(
+    preview_rows: list,
+    file_name: str = "modash.csv",
+    target_campaign_id: str | None = None,
+) -> IngestionConfirmRequest:
+    confirm_rows = []
+    for preview_row in preview_rows:
+        if preview_row.status == "invalid":
+            action = "skip"
+        elif preview_row.status == "matched_existing" and preview_row.dedup.influencer_id:
+            action = "merge"
+        elif preview_row.status == "new":
+            action = "create"
+        else:
+            action = "skip"
+        confirm_rows.append(
+            IngestionConfirmRow(
+                row=preview_row.row,
+                action=action,
+                existing_influencer_id=(
+                    preview_row.dedup.influencer_id if action == "merge" else None
+                ),
+            )
+        )
+    return IngestionConfirmRequest(
+        source_type=ImportSourceType.MODASH_CSV,
+        rows=confirm_rows,
+        file_name=file_name,
+        target_campaign_id=target_campaign_id,
+    )
+
+
+def _seed_mock_data(db_session: Session) -> None:
+    raw_connection = db_session.connection().connection
+    driver_connection = getattr(raw_connection, "driver_connection", None)
+    connection = driver_connection if driver_connection is not None else raw_connection.connection
+    connection.executescript(MOCK_SQL_FIXTURE.read_text(encoding="utf-8"))
+    db_session.expire_all()
+
+
+def _platform_count(db_session: Session, influencer_id: str, platform: str) -> int:
+    return db_session.scalar(
+        select(func.count()).select_from(InfluencerPlatform).where(
+            InfluencerPlatform.influencer_id == influencer_id,
+            InfluencerPlatform.platform == platform,
+        )
     )
 
 
@@ -266,7 +320,7 @@ def test_real_modash_export_preview_and_import_populates_influencer_graph(
     assert {row.status for row in result.rows} == {"created", "merged"}
 
     assert db_session.scalar(select(func.count()).select_from(Influencer)) == 174
-    assert db_session.scalar(select(func.count()).select_from(InfluencerPlatform)) == 577
+    assert db_session.scalar(select(func.count()).select_from(InfluencerPlatform)) == 524
     assert db_session.scalar(select(func.count()).select_from(InfluencerContact)) == 249
     assert db_session.scalar(select(func.count()).select_from(InfluencerAudienceSnapshot)) == 179
     assert db_session.scalar(select(func.count()).select_from(ImportSession)) == 1
@@ -357,3 +411,79 @@ def test_real_modash_export_import_with_campaign_creates_unique_deals(
     assert duplicate_result.created_deals == 0
     assert db_session.scalar(select(func.count()).select_from(Influencer)) == 174
     assert db_session.scalar(select(func.count()).select_from(Deal)) == 174
+
+
+def test_mock_modash_dedup_fixture_imports_library_only_without_deals(
+    db_session: Session,
+) -> None:
+    _seed_mock_data(db_session)
+    service = InfluencerIngestionService(db_session)
+    content = MODASH_DEDUP_FIXTURE.read_bytes()
+
+    preview = service.preview_import(
+        _preview_input(content, file_name=MODASH_DEDUP_FIXTURE.name)
+    )
+    result = service.confirm_import(
+        _confirm_request_with_preview_defaults(
+            preview.rows,
+            file_name=MODASH_DEDUP_FIXTURE.name,
+        )
+    )
+
+    assert preview.row_count == 9
+    assert {row.status for row in preview.rows[:6]} == {"matched_existing"}
+    assert [row.status for row in preview.rows[6:]] == ["new", "new", "new"]
+    assert result.imported_count == 9
+    assert result.skipped_count == 0
+    assert result.conflict_count == 0
+    assert result.created_deals == 0
+    assert {row.status for row in result.rows} == {"created", "merged"}
+    assert db_session.scalar(select(func.count()).select_from(Influencer)) == 10
+    assert db_session.scalar(select(func.count()).select_from(Deal)) == 9
+    assert _platform_count(db_session, RILEY_BROOKS_ID, "youtube") == 1
+
+
+def test_mock_modash_dedup_fixture_creates_only_missing_campaign_deals(
+    db_session: Session,
+) -> None:
+    _seed_mock_data(db_session)
+    service = InfluencerIngestionService(db_session)
+    content = MODASH_DEDUP_FIXTURE.read_bytes()
+
+    preview = service.preview_import(
+        _preview_input(content, file_name=MODASH_DEDUP_FIXTURE.name)
+    )
+    result = service.confirm_import(
+        _confirm_request_with_preview_defaults(
+            preview.rows,
+            file_name=MODASH_DEDUP_FIXTURE.name,
+            target_campaign_id=SPRING_SKINCARE_CAMPAIGN_ID,
+        )
+    )
+
+    assert result.imported_count == 9
+    assert result.skipped_count == 0
+    assert result.conflict_count == 0
+    assert result.created_deals == 5
+    assert db_session.scalar(select(func.count()).select_from(Influencer)) == 10
+    assert db_session.scalar(select(func.count()).select_from(Deal)) == 14
+    assert _platform_count(db_session, RILEY_BROOKS_ID, "youtube") == 1
+    assert sum("Campaign deal already exists" in " ".join(row.warnings) for row in result.rows) == 4
+
+    duplicate_preview = service.preview_import(
+        _preview_input(content, file_name=MODASH_DEDUP_FIXTURE.name)
+    )
+    duplicate_result = service.confirm_import(
+        _confirm_request_with_preview_defaults(
+            duplicate_preview.rows,
+            file_name=MODASH_DEDUP_FIXTURE.name,
+            target_campaign_id=SPRING_SKINCARE_CAMPAIGN_ID,
+        )
+    )
+
+    assert duplicate_result.imported_count == 9
+    assert duplicate_result.conflict_count == 0
+    assert duplicate_result.created_deals == 0
+    assert db_session.scalar(select(func.count()).select_from(Influencer)) == 10
+    assert db_session.scalar(select(func.count()).select_from(Deal)) == 14
+    assert _platform_count(db_session, RILEY_BROOKS_ID, "youtube") == 1

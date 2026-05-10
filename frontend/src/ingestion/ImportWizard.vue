@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import { type TableColumnsType, type UploadProps } from 'ant-design-vue'
+import { FileText, Import, UploadCloud, X } from '@lucide/vue'
 import { confirmImport, errorMessage, previewModashImport } from '../api/client'
 import type {
   CampaignResponse,
   IngestionConfirmAction,
   IngestionConfirmResponse,
+  IngestionRowResult,
   IngestionPreviewResponse,
   IngestionPreviewRow,
   ImportSourceType,
 } from '../api/types'
-import StatusBadge from '../shared/StatusBadge.vue'
+import { platformColor, platformOptions } from '../influencers/useInfluencers'
 
 const props = defineProps<{
   campaigns: CampaignResponse[]
@@ -26,18 +29,24 @@ const result = ref<IngestionConfirmResponse | null>(null)
 const previewing = ref(false)
 const confirming = ref(false)
 const error = ref<string | null>(null)
-const targetCampaignId = ref(props.selectedCampaignId ?? '')
+const targetCampaignId = ref<string | undefined>()
 const actions = reactive<Record<number, IngestionConfirmAction>>({})
 
 const selectedCampaignName = computed(
   () => props.campaigns.find((campaign) => campaign.id === targetCampaignId.value)?.name ?? null,
 )
 
-watch(
-  () => props.selectedCampaignId,
-  (campaignId) => {
-    targetCampaignId.value = campaignId ?? ''
-  },
+const campaignOptions = computed(() =>
+  props.campaigns.map((campaign) => ({
+    label: campaign.name,
+    value: campaign.id,
+  })),
+)
+
+const campaignImportHelp = computed(() =>
+  selectedCampaignName.value
+    ? `Influencers will be imported into the library and added to ${selectedCampaignName.value} when a campaign deal does not already exist.`
+    : 'No campaign selected. Influencers will only be imported into the library.',
 )
 
 const actionCounts = computed(() => {
@@ -48,6 +57,93 @@ const actionCounts = computed(() => {
   return counts
 })
 
+const previewErrorCount = computed(() => {
+  if (!preview.value) return 0
+  return (
+    preview.value.fatal_errors.length +
+    preview.value.rows.reduce((count, row) => count + row.row.parse_errors.length, 0)
+  )
+})
+
+const uploadFileList = computed<UploadProps['fileList']>(() =>
+  file.value
+    ? [
+        {
+          uid: 'selected-csv',
+          name: file.value.name,
+          status: 'done',
+          size: file.value.size,
+          type: file.value.type,
+        },
+      ]
+    : [],
+)
+
+const previewColumns: TableColumnsType<IngestionPreviewRow> = [
+  {
+    title: '#',
+    key: 'row',
+    width: 70,
+  },
+  {
+    title: 'Influencer',
+    key: 'influencer',
+    width: 260,
+  },
+  {
+    title: 'Platforms',
+    key: 'platforms',
+    width: 280,
+  },
+  {
+    title: 'Contact',
+    key: 'contact',
+    width: 220,
+  },
+  {
+    title: 'Location',
+    key: 'location',
+    width: 180,
+  },
+  {
+    title: 'Import status',
+    key: 'importStatus',
+    width: 180,
+  },
+  {
+    title: 'Action',
+    key: 'action',
+    width: 160,
+  },
+  {
+    title: 'Import notes',
+    key: 'importNotes',
+    width: 280,
+  },
+]
+
+const resultColumns: TableColumnsType<IngestionRowResult> = [
+  {
+    title: 'Row',
+    key: 'row',
+    width: 80,
+  },
+  {
+    title: 'Action',
+    key: 'action',
+    width: 140,
+  },
+  {
+    title: 'Result',
+    key: 'status',
+    width: 150,
+  },
+  {
+    title: 'Result notes',
+    key: 'resultNotes',
+  },
+]
+
 const defaultActionForRow = (row: IngestionPreviewRow): IngestionConfirmAction => {
   if (row.status === 'invalid') return 'skip'
   if (row.status === 'matched_existing' && row.dedup.influencer_id) return 'merge'
@@ -55,20 +151,87 @@ const defaultActionForRow = (row: IngestionPreviewRow): IngestionConfirmAction =
   return 'skip'
 }
 
-const badgeTone = (row: IngestionPreviewRow) => {
-  if (row.status === 'invalid') return 'danger'
-  if (row.status === 'possible_duplicate') return 'warning'
-  if (row.status === 'new') return 'success'
-  if (row.status === 'matched_existing') return 'active'
-  return 'neutral'
+const previewStatusColor = (row: IngestionPreviewRow) => {
+  if (row.status === 'invalid') return 'red'
+  if (row.status === 'possible_duplicate') return 'gold'
+  if (row.status === 'new') return 'green'
+  if (row.status === 'matched_existing') return 'orange'
+  return 'default'
+}
+
+const previewStatusLabel = (row: IngestionPreviewRow) => {
+  if (row.status === 'matched_existing') return 'Duplicate'
+  if (row.status === 'possible_duplicate') return 'Possible duplicate'
+  if (row.status === 'new') return 'New'
+  if (row.status === 'invalid') return 'Invalid'
+  return row.status
+}
+
+const actionColor = (action: IngestionConfirmAction) => {
+  if (action === 'create') return 'green'
+  if (action === 'merge') return 'blue'
+  return 'default'
+}
+
+const resultStatusColor = (status: IngestionRowResult['status']) => {
+  if (status === 'failed' || status === 'invalid' || status === 'conflict') return 'red'
+  if (status === 'created' || status === 'merged') return 'green'
+  return 'default'
 }
 
 const rowTitle = (row: IngestionPreviewRow) =>
   row.row.display_name || row.row.full_name || row.row.username || `Row ${row.row.source_row_number}`
 
-const handleFileChange = (event: Event) => {
-  const input = event.target as HTMLInputElement
-  file.value = input.files?.[0] ?? null
+const csvRowNumber = (row: { source_row_number: number }) => Math.max(1, row.source_row_number - 1)
+
+const formatNumber = (value?: number | null) =>
+  value === null || value === undefined ? null : new Intl.NumberFormat('en-US').format(value)
+
+const platformLabel = (platform: string) =>
+  platformOptions.find((option) => option.value === platform)?.label ?? platform
+
+const previewPlatforms = (row: IngestionPreviewRow) => {
+  const platforms = new Map<string, { platform: string; username?: string | null; followers?: number | null }>()
+  if (row.row.platform) {
+    platforms.set(row.row.platform, {
+      platform: row.row.platform,
+      username: row.row.username,
+      followers: row.row.follower_count,
+    })
+  }
+  row.row.social_links.forEach((link) => {
+    if (!platforms.has(link.platform)) {
+      platforms.set(link.platform, {
+        platform: link.platform,
+        username: link.username,
+      })
+    }
+  })
+  return Array.from(platforms.values())
+}
+
+const platformDisplayName = (platform: {
+  platform: string
+  username?: string | null
+  followers?: number | null
+}) => {
+  const username = platform.username ? ` @${platform.username.replace(/^@/, '')}` : ''
+  const followers = formatNumber(platform.followers)
+  return `${platformLabel(platform.platform)}${username}${followers ? ` - ${followers}` : ''}`
+}
+
+const previewContact = (row: IngestionPreviewRow) => row.row.contacts[0] ?? null
+
+const previewLocation = (row: IngestionPreviewRow) =>
+  [row.row.country, row.row.city].filter(Boolean).join(', ') || 'No location'
+
+const formatFileSize = (size?: number) => {
+  if (!size) return '0 KB'
+  if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const resetImportState = () => {
   preview.value = null
   result.value = null
   error.value = null
@@ -77,10 +240,22 @@ const handleFileChange = (event: Event) => {
   })
 }
 
-const setTargetCampaign = (event: Event) => {
-  const value = (event.target as HTMLSelectElement).value
+const setSelectedFile = (nextFile: File | null) => {
+  file.value = nextFile
+  resetImportState()
+}
+
+const beforeUpload: UploadProps['beforeUpload'] = (selectedFile) => {
+  setSelectedFile(selectedFile)
+  return false
+}
+
+const clearFile = () => {
+  setSelectedFile(null)
+}
+
+const setTargetCampaign = (value?: string) => {
   targetCampaignId.value = value
-  if (value) emit('campaignChanged', value)
 }
 
 const runPreview = async () => {
@@ -114,10 +289,10 @@ const runConfirm = async () => {
   result.value = null
 
   try {
-    result.value = await confirmImport({
+    const confirmResult = await confirmImport({
       source_type: preview.value.source_type as ImportSourceType,
       file_name: file.value.name,
-      target_campaign_id: targetCampaignId.value || null,
+      target_campaign_id: targetCampaignId.value ?? null,
       rows: preview.value.rows.map((previewRow) => {
         const action = actions[previewRow.row.source_row_number] ?? defaultActionForRow(previewRow)
         return {
@@ -127,6 +302,10 @@ const runConfirm = async () => {
         }
       }),
     })
+    result.value = confirmResult
+    if (targetCampaignId.value && confirmResult.created_deals > 0) {
+      emit('campaignChanged', targetCampaignId.value)
+    }
   } catch (confirmError) {
     error.value = errorMessage(confirmError)
   } finally {
@@ -136,342 +315,493 @@ const runConfirm = async () => {
 </script>
 
 <template>
-  <section class="import-layout">
-    <section class="import-main">
-      <div class="section-heading">
-        <div>
-          <h1>Modash CSV wizard</h1>
+  <section class="import-page">
+    <div class="page-heading">
+      <div>
+        <a-breadcrumb>
+          <a-breadcrumb-item>
+            <RouterLink :to="{ name: 'influencers' }">Influencers</RouterLink>
+          </a-breadcrumb-item>
+          <a-breadcrumb-item>Import CSV</a-breadcrumb-item>
+        </a-breadcrumb>
+        <h1>Import influencers</h1>
+        <p class="page-description">
+          Import Modash CSV rows into the Influencer Library, then optionally create campaign deal rows
+          for the selected campaign.
+        </p>
+      </div>
+    </div>
+
+    <a-alert v-if="error" class="page-alert" type="error" :message="error" show-icon />
+
+    <a-card class="setup-card" title="Upload and setup">
+      <div class="setup-grid">
+        <div class="upload-panel">
+          <a-upload-dragger
+            accept=".csv,text/csv"
+            :before-upload="beforeUpload"
+            :file-list="uploadFileList"
+            :max-count="1"
+            :show-upload-list="false"
+          >
+            <p class="upload-icon">
+              <UploadCloud aria-hidden="true" />
+            </p>
+            <p class="upload-title">Drop a Modash CSV here or select a file</p>
+            <p class="upload-help">CSV files are parsed in preview before anything is written.</p>
+          </a-upload-dragger>
+
+          <div v-if="file" class="selected-file">
+            <FileText class="selected-file-icon" aria-hidden="true" />
+            <div>
+              <strong>{{ file.name }}</strong>
+              <span>{{ file.type || 'text/csv' }} - {{ formatFileSize(file.size) }}</span>
+            </div>
+            <a-button type="text" title="Clear selected file" aria-label="Clear selected file" @click="clearFile">
+              <X aria-hidden="true" />
+            </a-button>
+          </div>
         </div>
-        <StatusBadge label="Real preview + confirm API" tone="active" />
-      </div>
 
-      <div class="setup-row">
-        <label>
-          CSV file
-          <input type="file" accept=".csv,text/csv" @change="handleFileChange" />
-        </label>
-        <label>
-          Target campaign
-          <select :value="targetCampaignId" @change="setTargetCampaign">
-            <option value="">Library only</option>
-            <option v-for="campaign in campaigns" :key="campaign.id" :value="campaign.id">
-              {{ campaign.name }}
-            </option>
-          </select>
-        </label>
-        <button type="button" class="primary-button" :disabled="!file || previewing" @click="runPreview">
-          {{ previewing ? 'Previewing...' : 'Preview CSV' }}
-        </button>
-      </div>
-
-      <div v-if="error" class="error-box">{{ error }}</div>
-
-      <div v-if="preview?.fatal_errors.length" class="error-box">
-        <strong>Fatal import errors</strong>
-        <span v-for="fatalError in preview.fatal_errors" :key="fatalError">{{ fatalError }}</span>
-      </div>
-
-      <div v-if="preview" class="preview-tools">
-        <div>
-          <strong>{{ preview.row_count }} row(s) parsed</strong>
-          <span>{{ selectedCampaignName ? `Deals will be added to ${selectedCampaignName}.` : 'Rows will update the global library only.' }}</span>
-        </div>
-        <div class="action-summary">
-          <StatusBadge :label="`${actionCounts.create} create`" tone="success" />
-          <StatusBadge :label="`${actionCounts.merge} merge`" tone="active" />
-          <StatusBadge :label="`${actionCounts.skip} skip`" />
-        </div>
-      </div>
-
-      <div v-if="preview" class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Row</th>
-              <th>Influencer</th>
-              <th>Platform</th>
-              <th>Dedup</th>
-              <th>Action</th>
-              <th>Messages</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="previewRow in preview.rows" :key="previewRow.row.source_row_number">
-              <td>{{ previewRow.row.source_row_number }}</td>
-              <td>
-                <strong>{{ rowTitle(previewRow) }}</strong>
-                <span class="subtext">{{ previewRow.row.country }} {{ previewRow.row.city }}</span>
-              </td>
-              <td>
-                <strong>{{ previewRow.row.platform ?? 'Unknown' }}</strong>
-                <span class="subtext">{{ previewRow.row.username ?? previewRow.row.profile_url }}</span>
-              </td>
-              <td>
-                <StatusBadge :label="previewRow.status" :tone="badgeTone(previewRow)" />
-                <span class="subtext">{{ previewRow.dedup.reason }}</span>
-              </td>
-              <td>
-                <select v-model="actions[previewRow.row.source_row_number]">
-                  <option value="create">Create</option>
-                  <option :disabled="!previewRow.dedup.influencer_id" value="merge">Merge</option>
-                  <option value="skip">Skip</option>
-                </select>
-              </td>
-              <td>
-                <div class="message-list">
-                  <span v-for="message in previewRow.row.parse_errors" :key="message" class="danger-text">
-                    {{ message }}
-                  </span>
-                  <span v-for="message in previewRow.row.warnings" :key="message">{{ message }}</span>
-                  <span v-if="!previewRow.row.parse_errors.length && !previewRow.row.warnings.length">-</span>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <aside class="confirm-panel">
-      <h2>Confirm write</h2>
-      <p>
-        Preview keeps parsing and dedup decisions server-side. Confirm sends your row actions back through
-        the source-agnostic import endpoint.
-      </p>
-      <button type="button" class="primary-button" :disabled="!preview || confirming" @click="runConfirm">
-        {{ confirming ? 'Confirming...' : 'Confirm import' }}
-      </button>
-
-      <div v-if="result" class="result-box">
-        <strong>Import session {{ result.import_session_id }}</strong>
-        <span>{{ result.imported_count }} imported, {{ result.skipped_count }} skipped, {{ result.conflict_count }} conflicts</span>
-        <span>{{ result.created_deals }} campaign deal(s) created</span>
-      </div>
-
-      <div v-if="result" class="result-list">
-        <div v-for="row in result.rows" :key="row.source_row_number" class="result-row">
-          <span>Row {{ row.source_row_number }}</span>
-          <StatusBadge :label="row.status" :tone="row.status === 'failed' ? 'danger' : 'neutral'" />
+        <div class="setup-controls">
+          <label class="field-label" for="target-campaign">Target campaign</label>
+          <a-select
+            id="target-campaign"
+            allow-clear
+            placeholder="Optional: choose a campaign"
+            :value="targetCampaignId"
+            :options="campaignOptions"
+            @change="setTargetCampaign"
+          />
+          <p class="field-help">{{ campaignImportHelp }}</p>
+          <a-button type="primary" :disabled="!file || previewing" :loading="previewing" @click="runPreview">
+            <Import class="button-leading-icon" aria-hidden="true" />
+            Preview CSV
+          </a-button>
         </div>
       </div>
-    </aside>
+    </a-card>
+
+    <a-card v-if="preview" class="review-card" :body-style="{ padding: '0' }">
+      <template #title>
+        <div class="card-title-block">
+          <span>Review rows</span>
+          <small>
+            {{
+              selectedCampaignName
+                ? `Rows will update the library and create missing deals in ${selectedCampaignName}.`
+                : 'Rows will update the global library only. No campaign deals will be created.'
+            }}
+          </small>
+        </div>
+      </template>
+      <div class="review-body">
+        <div class="summary-grid">
+          <div class="summary-item">
+            <span>Parsed rows</span>
+            <strong>{{ preview.row_count }}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Create</span>
+            <strong>{{ actionCounts.create }}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Merge</span>
+            <strong>{{ actionCounts.merge }}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Skip</span>
+            <strong>{{ actionCounts.skip }}</strong>
+          </div>
+          <div class="summary-item">
+            <span>Errors</span>
+            <strong>{{ previewErrorCount }}</strong>
+          </div>
+        </div>
+
+        <a-alert v-if="preview.fatal_errors.length" class="page-alert" type="error" show-icon>
+          <template #message>Fatal import errors</template>
+          <template #description>
+            <ul class="alert-list">
+              <li v-for="fatalError in preview.fatal_errors" :key="fatalError">{{ fatalError }}</li>
+            </ul>
+          </template>
+        </a-alert>
+      </div>
+
+      <a-table
+        :columns="previewColumns"
+        :data-source="preview.rows"
+        :pagination="{ pageSize: 10, showSizeChanger: true }"
+        :row-key="(record: IngestionPreviewRow) => record.row.source_row_number"
+        :scroll="{ x: 1460 }"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'row'">
+            {{ csvRowNumber(record.row) }}
+          </template>
+
+          <template v-else-if="column.key === 'influencer'">
+            <div class="influencer-cell">
+              <strong>{{ rowTitle(record) }}</strong>
+              <span v-if="record.row.full_name && record.row.full_name !== rowTitle(record)">
+                {{ record.row.full_name }}
+              </span>
+            </div>
+          </template>
+
+          <template v-else-if="column.key === 'platforms'">
+            <div v-if="previewPlatforms(record).length" class="platform-stack">
+              <a-tag
+                v-for="platform in previewPlatforms(record)"
+                :key="`${record.row.source_row_number}:${platform.platform}:${platform.username ?? ''}`"
+                :color="platformColor(platform.platform)"
+              >
+                {{ platformDisplayName(platform) }}
+              </a-tag>
+            </div>
+            <span v-else class="muted">No platforms</span>
+          </template>
+
+          <template v-else-if="column.key === 'contact'">
+            <div v-if="previewContact(record)" class="contact-cell">
+              <span>{{ previewContact(record)?.email }}</span>
+              <small>{{ previewContact(record)?.source }}</small>
+            </div>
+            <span v-else class="muted">No contact</span>
+          </template>
+
+          <template v-else-if="column.key === 'location'">
+            <span>{{ previewLocation(record) }}</span>
+          </template>
+
+          <template v-else-if="column.key === 'importStatus'">
+            <div class="stacked-cell">
+              <a-tag :color="previewStatusColor(record)">{{ previewStatusLabel(record) }}</a-tag>
+              <span>{{ record.dedup.reason || 'No match found' }}</span>
+            </div>
+          </template>
+
+          <template v-else-if="column.key === 'action'">
+            <a-select v-model:value="actions[record.row.source_row_number]" class="row-action-select">
+              <a-select-option value="create">Create</a-select-option>
+              <a-select-option :disabled="!record.dedup.influencer_id" value="merge">Merge</a-select-option>
+              <a-select-option value="skip">Skip</a-select-option>
+            </a-select>
+          </template>
+
+          <template v-else-if="column.key === 'importNotes'">
+            <div class="message-list">
+              <span v-for="message in record.row.parse_errors" :key="message" class="danger-text">
+                {{ message }}
+              </span>
+              <span v-for="message in record.row.warnings" :key="message">{{ message }}</span>
+              <span v-if="!record.row.parse_errors.length && !record.row.warnings.length">Ready</span>
+            </div>
+          </template>
+        </template>
+      </a-table>
+
+      <div class="review-actions">
+        <a-button type="primary" :disabled="!preview || confirming" :loading="confirming" @click="runConfirm">
+          Confirm import
+        </a-button>
+      </div>
+
+      <div v-if="result" class="result-section">
+        <a-alert class="page-alert" type="success" show-icon>
+          <template #message>Import complete</template>
+          <template #description>
+            {{ result.imported_count }} imported, {{ result.skipped_count }} skipped,
+            {{ result.conflict_count }} conflicts, {{ result.created_deals }} campaign deals created.
+          </template>
+        </a-alert>
+
+        <a-table
+          size="small"
+          :columns="resultColumns"
+          :data-source="result.rows"
+          :pagination="{ pageSize: 8, size: 'small' }"
+          :row-key="(record: IngestionRowResult) => record.source_row_number"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'row'">
+              {{ csvRowNumber(record) }}
+            </template>
+
+            <template v-else-if="column.key === 'action'">
+              <a-tag :color="actionColor(record.action)">{{ record.action }}</a-tag>
+            </template>
+
+            <template v-else-if="column.key === 'status'">
+              <a-tag :color="resultStatusColor(record.status)">{{ record.status }}</a-tag>
+            </template>
+
+            <template v-else-if="column.key === 'resultNotes'">
+              <div class="message-list">
+                <span v-for="message in record.errors" :key="message" class="danger-text">
+                  {{ message }}
+                </span>
+                <span v-for="message in record.warnings" :key="message">{{ message }}</span>
+                <span v-if="!record.errors.length && !record.warnings.length">Ready</span>
+              </div>
+            </template>
+          </template>
+        </a-table>
+      </div>
+    </a-card>
   </section>
 </template>
 
 <style scoped>
-.import-layout {
+.import-page {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
-  gap: 20px;
+  gap: 18px;
 }
 
-.section-heading,
-.preview-tools {
+.page-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
 }
 
-h1,
-h2 {
-  margin: 0;
-  color: #242826;
+.page-heading :deep(.ant-breadcrumb) {
+  margin-bottom: 8px;
 }
 
 h1 {
-  font-size: 28px;
+  margin: 0;
+  color: #20262d;
+  font-size: 30px;
 }
 
-h2 {
-  font-size: 20px;
+.page-description {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: #58636f;
+  line-height: 1.5;
 }
 
-.setup-row {
+.page-alert {
+  border-radius: 8px;
+}
+
+.setup-card,
+.review-card {
+  overflow: hidden;
+}
+
+.setup-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(220px, 300px) auto;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  gap: 18px;
+  align-items: start;
+}
+
+.upload-panel {
+  display: grid;
   gap: 12px;
-  margin-bottom: 14px;
 }
 
-label {
+.upload-icon {
+  margin: 0 0 8px;
+  color: #215f4e;
+}
+
+.upload-icon svg {
+  width: 32px;
+  height: 32px;
+}
+
+.upload-title {
+  margin: 0;
+  color: #20262d;
+  font-weight: 700;
+}
+
+.upload-help {
+  margin: 4px 0 0;
+  color: #697582;
+}
+
+.selected-file {
   display: grid;
-  gap: 6px;
-  color: #515b54;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e4e9f1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.selected-file-icon {
+  width: 18px;
+  height: 18px;
+  color: #215f4e;
+}
+
+.selected-file strong,
+.summary-item strong,
+.stacked-cell strong {
+  display: block;
+  color: #20262d;
+}
+
+.selected-file span,
+.field-help,
+.card-title-block small,
+.summary-item span,
+.stacked-cell span,
+.message-list {
+  color: #697582;
+  font-size: 12px;
+}
+
+.selected-file :deep(.ant-btn) {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.selected-file :deep(.ant-btn svg) {
+  width: 16px;
+  height: 16px;
+}
+
+.setup-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.field-label {
+  color: #38414a;
   font-size: 12px;
   font-weight: 700;
 }
 
-input,
-select {
-  width: 100%;
-  min-width: 0;
-  height: 36px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 0 10px;
-  background: #ffffff;
-  color: #242826;
-  font: inherit;
+.field-help {
+  margin: -2px 0 4px;
+  line-height: 1.5;
 }
 
-.primary-button {
-  min-height: 36px;
-  border: 1px solid #215f4e;
-  border-radius: 8px;
-  padding: 0 12px;
-  background: #215f4e;
-  color: #ffffff;
-  font-weight: 800;
-  cursor: pointer;
+.button-leading-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -3px;
 }
 
-.primary-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.error-box,
-.result-box,
-.confirm-panel {
-  border-radius: 8px;
-}
-
-.error-box {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 12px;
-  padding: 10px;
-  border: 1px solid #f1b4ae;
-  background: #fff0ee;
-  color: #9f2d20;
-  font-size: 13px;
-}
-
-.preview-tools {
-  align-items: center;
-  padding: 12px;
-  border: 1px solid #dbe3ee;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-.preview-tools div {
+.influencer-cell,
+.card-title-block,
+.stacked-cell,
+.message-list {
   display: grid;
   gap: 4px;
 }
 
-.preview-tools span {
-  color: #657068;
-  font-size: 13px;
+.influencer-cell span,
+.contact-cell small,
+.muted {
+  color: #697582;
 }
 
-.action-summary {
+.platform-stack {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.table-wrap {
-  overflow-x: auto;
-  border: 1px solid #dbe3ee;
-  border-radius: 8px;
-  background: #ffffff;
+.contact-cell {
+  display: grid;
+  gap: 2px;
 }
 
-table {
-  width: 100%;
-  min-width: 980px;
-  border-collapse: collapse;
+.review-body {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-bottom: 1px solid #edf0f5;
 }
 
-th,
-td {
-  padding: 11px 12px;
-  border-bottom: 1px solid #edf1f6;
-  vertical-align: top;
-  text-align: left;
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 10px;
 }
 
-th {
-  background: #f8fafc;
-  color: #626b64;
-  font-size: 12px;
-  text-transform: uppercase;
-}
-
-td strong,
-.result-box strong {
-  display: block;
-  color: #242826;
-}
-
-.subtext {
-  display: block;
-  margin-top: 4px;
-  color: #657068;
-  font-size: 12px;
-}
-
-.message-list {
+.summary-item {
   display: grid;
   gap: 4px;
-  color: #657068;
-  font-size: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e4e9f1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.summary-item strong {
+  font-size: 22px;
+}
+
+.alert-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.row-action-select {
+  width: 130px;
 }
 
 .danger-text {
-  color: #9f2d20;
+  color: #b42318;
 }
 
-.confirm-panel {
-  display: grid;
-  align-content: start;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid #dbe3ee;
-  background: #ffffff;
+.review-card :deep(.ant-table-wrapper) {
+  max-width: 100%;
+  min-width: 0;
 }
 
-.confirm-panel p {
-  margin: 0;
-  color: #657068;
-  font-size: 13px;
-  line-height: 1.5;
+.review-card :deep(.ant-table-pagination) {
+  padding-inline: 14px;
 }
 
-.result-box {
-  display: grid;
-  gap: 5px;
-  padding: 10px;
-  border: 1px solid #9fc7ba;
-  background: #e8f5ef;
-  color: #17634d;
-  font-size: 13px;
-}
-
-.result-list {
-  display: grid;
-  gap: 8px;
-}
-
-.result-row {
+.review-actions {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 34px;
-  padding: 8px;
-  border: 1px solid #e1e7ef;
-  border-radius: 8px;
+  justify-content: flex-end;
+  padding: 14px 16px;
+  border-top: 1px solid #edf0f5;
+}
+
+.result-section {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-top: 1px solid #edf0f5;
 }
 
 @media (max-width: 1080px) {
-  .import-layout,
-  .setup-row {
+  .setup-grid,
+  .summary-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .review-card :deep(.ant-card-head) {
+    align-items: flex-start;
+  }
+
+  .review-card :deep(.ant-card-head-wrapper) {
+    display: grid;
+    gap: 12px;
+  }
+
+  .review-card :deep(.ant-card-extra) {
+    margin-left: 0;
   }
 }
 </style>
