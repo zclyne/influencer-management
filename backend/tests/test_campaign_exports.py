@@ -56,7 +56,7 @@ def test_campaign_export_includes_deal_summaries_and_filters(
     deal = DealRepository(db_session).create(
         campaign_id=campaign.id,
         influencer_id=influencer.id,
-        status=DealStatus.APPROVED.value,
+        status=DealStatus.ACTIVE.value,
         internal_notes="VIP",
     )
     CompensationItemRepository(db_session).create(
@@ -70,7 +70,7 @@ def test_campaign_export_includes_deal_summaries_and_filters(
 
     response = api_client.get(
         f"/api/v1/campaigns/{campaign.id}/export.csv",
-        params={"status": DealStatus.APPROVED.value, "platform": "instagram"},
+        params={"status": DealStatus.ACTIVE.value, "platform": "instagram"},
     )
 
     assert response.status_code == 200

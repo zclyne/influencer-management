@@ -148,7 +148,7 @@ def _create_deal(db_session: Session) -> tuple[str, str]:
     deal = DealRepository(db_session).create(
         campaign_id=campaign.id,
         influencer_id=influencer.id,
-        status=DealStatus.OUTREACHED.value,
+        status=DealStatus.ACTIVE.value,
     )
     db_session.commit()
     return campaign.id, deal.id

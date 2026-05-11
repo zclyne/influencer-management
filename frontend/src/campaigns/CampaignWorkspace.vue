@@ -278,10 +278,9 @@ const filteredInfluencers = computed(() => {
 })
 
 const statusColor = (status: DealStatus) => {
-  if (status === 'ACTIVE' || status === 'COMPLETED') return 'green'
-  if (status === 'NEGOTIATING' || status === 'RESPONDED') return 'gold'
+  if (status === 'ACTIVE') return 'green'
+  if (status === 'COMPLETED') return 'blue'
   if (status === 'LOST') return 'red'
-  if (status === 'OUTREACHED') return 'blue'
   return 'default'
 }
 

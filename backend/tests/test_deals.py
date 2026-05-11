@@ -52,7 +52,7 @@ def test_create_duplicate_list_update_and_archive_deal(
         f"/api/v1/campaigns/{campaign_id}/deals",
         json={
             "influencer_id": influencer_id,
-            "status": "APPROVED",
+            "status": "ACTIVE",
             "labels": ["priority", "priority", "  paid  "],
             "internal_notes": "Good fit",
         },
@@ -60,7 +60,7 @@ def test_create_duplicate_list_update_and_archive_deal(
 
     assert create_response.status_code == 201
     created = create_response.json()
-    assert created["status"] == DealStatus.APPROVED.value
+    assert created["status"] == DealStatus.ACTIVE.value
     assert created["labels"] == ["priority", "paid"]
     assert created["influencer"]["display_name"] == "Creator One"
     assert created["primary_platform"]["follower_count"] == 125000
@@ -79,7 +79,7 @@ def test_create_duplicate_list_update_and_archive_deal(
 
     list_response = api_client.get(
         f"/api/v1/campaigns/{campaign_id}/deals",
-        params={"status": "APPROVED", "platform": "instagram"},
+        params={"status": "ACTIVE", "platform": "instagram"},
     )
     assert list_response.status_code == 200
     rows = list_response.json()["deals"]
@@ -144,7 +144,7 @@ def test_bulk_create_and_bulk_update_deals(
         f"/api/v1/campaigns/{campaign.id}/deals/bulk",
         json={
             "deal_ids": [existing.id, new_deal_id, "missing-deal"],
-            "status": "OUTREACHED",
+            "status": "ACTIVE",
             "labels": ["ready"],
             "label_mode": "add",
             "internal_notes": "Sent first email",
@@ -157,7 +157,7 @@ def test_bulk_create_and_bulk_update_deals(
     assert updated["updated_count"] == 2
     assert updated["error_count"] == 1
     refreshed = DealRepository(db_session).get(existing.id)
-    assert refreshed.status == DealStatus.OUTREACHED.value
+    assert refreshed.status == DealStatus.ACTIVE.value
     assert refreshed.labels_json == ["ready"]
     assert refreshed.internal_notes == "Sent first email"
 

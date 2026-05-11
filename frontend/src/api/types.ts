@@ -420,10 +420,6 @@ export interface IngestionConfirmResponse {
 
 export type DealStatus =
   | 'DRAFT'
-  | 'APPROVED'
-  | 'OUTREACHED'
-  | 'RESPONDED'
-  | 'NEGOTIATING'
   | 'ACTIVE'
   | 'COMPLETED'
   | 'LOST'

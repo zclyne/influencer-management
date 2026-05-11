@@ -14,7 +14,7 @@ from app.repositories.sqlalchemy import (
 def _create_outreach_deal(
     db_session: Session,
     *,
-    status: DealStatus = DealStatus.APPROVED,
+    status: DealStatus = DealStatus.DRAFT,
     campaign_name: str = "Spring Launch",
 ):
     campaign = CampaignRepository(db_session).create(name=campaign_name)
@@ -162,7 +162,7 @@ def test_confirm_sent_updates_only_early_statuses(
     api_client: TestClient,
     db_session: Session,
 ) -> None:
-    _, approved = _create_outreach_deal(db_session, status=DealStatus.APPROVED)
+    _, approved = _create_outreach_deal(db_session, status=DealStatus.DRAFT)
     _, active = _create_outreach_deal(
         db_session,
         status=DealStatus.ACTIVE,
@@ -174,5 +174,5 @@ def test_confirm_sent_updates_only_early_statuses(
 
     assert approved_response.status_code == 200
     assert active_response.status_code == 200
-    assert db_session.get(type(approved), approved.id).status == DealStatus.OUTREACHED.value
+    assert db_session.get(type(approved), approved.id).status == DealStatus.ACTIVE.value
     assert db_session.get(type(active), active.id).status == DealStatus.ACTIVE.value

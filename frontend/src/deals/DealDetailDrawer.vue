@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
-import type { DealPipelineRow, PrimaryPlatformSummary } from '../api/types'
+import type { DealPipelineRow, DealStatus, PrimaryPlatformSummary } from '../api/types'
 import { dealStatusLabels } from '../campaigns/useCampaignWorkspace'
 import { platformColor } from '../influencers/useInfluencers'
 
@@ -31,6 +31,13 @@ const platformLabel = (platform: PrimaryPlatformSummary) => {
 const locationLabel = () => {
   if (!props.deal) return 'Not set'
   return [props.deal.influencer.city, props.deal.influencer.country].filter(Boolean).join(', ') || 'Not set'
+}
+
+const statusColor = (status: DealStatus) => {
+  if (status === 'ACTIVE') return 'green'
+  if (status === 'COMPLETED') return 'blue'
+  if (status === 'LOST') return 'red'
+  return 'default'
 }
 </script>
 
@@ -63,7 +70,7 @@ const locationLabel = () => {
 
       <a-descriptions bordered size="small" :column="1">
         <a-descriptions-item label="Status">
-          <a-tag>{{ dealStatusLabels[deal.status] }}</a-tag>
+          <a-tag :color="statusColor(deal.status)">{{ dealStatusLabels[deal.status] }}</a-tag>
         </a-descriptions-item>
         <a-descriptions-item label="Primary contact">
           <span v-if="deal.primary_contact">{{ deal.primary_contact.email }}</span>

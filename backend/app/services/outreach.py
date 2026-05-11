@@ -20,8 +20,6 @@ from app.schemas.outreach import (
 
 VARIABLE_RE = re.compile(r"{{\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*}}")
 LATER_STATUSES = {
-    DealStatus.RESPONDED.value,
-    DealStatus.NEGOTIATING.value,
     DealStatus.ACTIVE.value,
     DealStatus.COMPLETED.value,
     DealStatus.LOST.value,
@@ -83,8 +81,8 @@ class OutreachService:
 
     def confirm_sent(self, deal_id: str) -> OutreachDraftResponse:
         deal = self._require_deal(deal_id)
-        if deal.status not in LATER_STATUSES and deal.status != DealStatus.OUTREACHED.value:
-            self.deals.update(deal, status=DealStatus.OUTREACHED.value)
+        if deal.status not in LATER_STATUSES:
+            self.deals.update(deal, status=DealStatus.ACTIVE.value)
             self.db.commit()
         return OutreachDraftResponse(
             deal_id=deal.id,

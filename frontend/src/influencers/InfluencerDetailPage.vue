@@ -281,10 +281,9 @@ const roleLabel = (role: ContactRole) =>
   contactRoleOptions.find((option) => option.value === role)?.label ?? role
 
 const statusColor = (status: string) => {
-  if (status === 'ACTIVE' || status === 'COMPLETED') return 'green'
-  if (status === 'NEGOTIATING' || status === 'RESPONDED') return 'gold'
+  if (status === 'ACTIVE') return 'green'
+  if (status === 'COMPLETED') return 'blue'
   if (status === 'LOST') return 'red'
-  if (status === 'OUTREACHED') return 'blue'
   return 'default'
 }
 
@@ -573,22 +572,10 @@ void loadInfluencerDetail()
           </a-card>
         </div>
 
-        <a-card class="bio-card" size="small">
-          <template #title>Bio</template>
-          <p>{{ influencer.bio || 'No bio yet.' }}</p>
-        </a-card>
-
-        <div class="content-grid">
-          <a-card class="section-card">
-            <template #title>Notes</template>
-            <template #extra>
-              <a-button @click="openNotesEdit">
-                <Pencil class="button-leading-icon" aria-hidden="true" />
-                Edit
-              </a-button>
-            </template>
-            <p v-if="influencer.notes" class="notes-content">{{ influencer.notes }}</p>
-            <span v-else class="muted">No notes yet.</span>
+        <div class="profile-info-grid">
+          <a-card class="bio-card section-card" size="small">
+            <template #title>Bio</template>
+            <p>{{ influencer.bio || 'No bio yet.' }}</p>
           </a-card>
 
           <a-card class="section-card">
@@ -605,6 +592,87 @@ void loadInfluencerDetail()
             <span v-else class="muted">No tags</span>
           </a-card>
 
+          <a-card class="section-card">
+            <template #title>Contacts</template>
+            <template #extra>
+              <a-button @click="openCreateContact">
+                <Plus class="button-leading-icon" aria-hidden="true" />
+                Add contact
+              </a-button>
+            </template>
+            <a-table
+              :columns="contactColumns"
+              :data-source="influencer.contacts"
+              :pagination="false"
+              :row-key="(record: InfluencerContactResponse) => record.id"
+              :scroll="{ x: 720 }"
+              size="small"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'contact'">
+                  <strong>{{ record.email }}</strong>
+                  <p v-if="record.name" class="cell-note">{{ record.name }}</p>
+                  <p v-if="record.conflict_influencer_ids.length" class="cell-warning">
+                    Same email on {{ record.conflict_influencer_ids.length }} other influencer(s)
+                  </p>
+                </template>
+                <template v-else-if="column.key === 'role'">
+                  {{ roleLabel(record.role) }}
+                </template>
+                <template v-else-if="column.key === 'primary'">
+                  <a-tag v-if="record.is_primary" color="green">Yes</a-tag>
+                  <span v-else>No</span>
+                </template>
+                <template v-else-if="column.key === 'source'">
+                  {{ record.source || 'Not set' }}
+                </template>
+                <template v-else-if="column.key === 'actions'">
+                  <a-space>
+                    <a-button
+                      class="table-action-icon"
+                      type="text"
+                      title="Edit contact"
+                      aria-label="Edit contact"
+                      @click="openEditContact(record)"
+                    >
+                      <Pencil aria-hidden="true" />
+                    </a-button>
+                    <a-popconfirm
+                      title="Delete this contact?"
+                      ok-text="Delete"
+                      cancel-text="Cancel"
+                      @confirm="removeContact(record)"
+                    >
+                      <a-button
+                        class="table-action-icon"
+                        danger
+                        type="text"
+                        title="Delete contact"
+                        aria-label="Delete contact"
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </a-button>
+                    </a-popconfirm>
+                  </a-space>
+                </template>
+              </template>
+            </a-table>
+          </a-card>
+
+          <a-card class="section-card">
+            <template #title>Notes</template>
+            <template #extra>
+              <a-button @click="openNotesEdit">
+                <Pencil class="button-leading-icon" aria-hidden="true" />
+                Edit
+              </a-button>
+            </template>
+            <p v-if="influencer.notes" class="notes-content">{{ influencer.notes }}</p>
+            <span v-else class="muted">No notes yet.</span>
+          </a-card>
+        </div>
+
+        <div class="content-grid">
           <a-card class="section-card platform-card">
             <template #title>Platform identities</template>
             <template #extra>
@@ -670,73 +738,6 @@ void loadInfluencerDetail()
                         type="text"
                         title="Delete platform"
                         aria-label="Delete platform"
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </a-button>
-                    </a-popconfirm>
-                  </a-space>
-                </template>
-              </template>
-            </a-table>
-          </a-card>
-
-          <a-card class="section-card">
-            <template #title>Contacts</template>
-            <template #extra>
-              <a-button @click="openCreateContact">
-                <Plus class="button-leading-icon" aria-hidden="true" />
-                Add contact
-              </a-button>
-            </template>
-            <a-table
-              :columns="contactColumns"
-              :data-source="influencer.contacts"
-              :pagination="false"
-              :row-key="(record: InfluencerContactResponse) => record.id"
-              :scroll="{ x: 720 }"
-              size="small"
-            >
-              <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'contact'">
-                  <strong>{{ record.email }}</strong>
-                  <p v-if="record.name" class="cell-note">{{ record.name }}</p>
-                  <p v-if="record.conflict_influencer_ids.length" class="cell-warning">
-                    Same email on {{ record.conflict_influencer_ids.length }} other influencer(s)
-                  </p>
-                </template>
-                <template v-else-if="column.key === 'role'">
-                  {{ roleLabel(record.role) }}
-                </template>
-                <template v-else-if="column.key === 'primary'">
-                  <a-tag v-if="record.is_primary" color="green">Yes</a-tag>
-                  <span v-else>No</span>
-                </template>
-                <template v-else-if="column.key === 'source'">
-                  {{ record.source || 'Not set' }}
-                </template>
-                <template v-else-if="column.key === 'actions'">
-                  <a-space>
-                    <a-button
-                      class="table-action-icon"
-                      type="text"
-                      title="Edit contact"
-                      aria-label="Edit contact"
-                      @click="openEditContact(record)"
-                    >
-                      <Pencil aria-hidden="true" />
-                    </a-button>
-                    <a-popconfirm
-                      title="Delete this contact?"
-                      ok-text="Delete"
-                      cancel-text="Cancel"
-                      @confirm="removeContact(record)"
-                    >
-                      <a-button
-                        class="table-action-icon"
-                        danger
-                        type="text"
-                        title="Delete contact"
-                        aria-label="Delete contact"
                       >
                         <Trash2 aria-hidden="true" />
                       </a-button>
@@ -1064,15 +1065,34 @@ h1 {
   line-height: 1.5;
 }
 
+.profile-info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  align-items: stretch;
+}
+
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.5fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
 
 .section-card {
   min-width: 0;
   overflow: hidden;
+}
+
+.profile-info-grid .section-card {
+  height: 100%;
+}
+
+.profile-info-grid .section-card :deep(.ant-card) {
+  height: 100%;
+}
+
+.profile-info-grid .section-card :deep(.ant-card-body) {
+  height: calc(100% - 48px);
 }
 
 .section-card :deep(.ant-card-body) {
@@ -1083,10 +1103,6 @@ h1 {
 .section-card :deep(.ant-table-wrapper) {
   max-width: 100%;
   min-width: 0;
-}
-
-.platform-card {
-  grid-row: span 1;
 }
 
 .cell-note {
@@ -1127,6 +1143,10 @@ h1 {
 @media (max-width: 980px) {
   .influencer-overview {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .profile-info-grid {
+    grid-template-columns: 1fr;
   }
 
   .content-grid {

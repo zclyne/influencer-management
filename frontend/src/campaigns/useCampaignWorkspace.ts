@@ -18,35 +18,14 @@ import type {
   DealStatus,
 } from '../api/types'
 
-export const dealStatuses: DealStatus[] = [
-  'DRAFT',
-  'APPROVED',
-  'OUTREACHED',
-  'RESPONDED',
-  'NEGOTIATING',
-  'ACTIVE',
-  'COMPLETED',
-  'LOST',
-]
+export const dealStatuses: DealStatus[] = ['DRAFT', 'ACTIVE', 'COMPLETED', 'LOST']
 
 export const dealStatusLabels: Record<DealStatus, string> = {
   DRAFT: 'Draft',
-  APPROVED: 'Approved',
-  OUTREACHED: 'Outreached',
-  RESPONDED: 'Responded',
-  NEGOTIATING: 'Negotiating',
   ACTIVE: 'Active',
   COMPLETED: 'Completed',
   LOST: 'Lost',
 }
-
-const inProgressStatuses = new Set<DealStatus>([
-  'APPROVED',
-  'OUTREACHED',
-  'RESPONDED',
-  'NEGOTIATING',
-  'ACTIVE',
-])
 
 const parseMoney = (value: string | number) => {
   const amount = typeof value === 'number' ? value : Number(value)
@@ -148,15 +127,10 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
   const totalDealCount = computed(() => activeDeals.value.length)
 
   const inProgressDealCount = computed(
-    () => activeDeals.value.filter((deal) => inProgressStatuses.has(deal.status)).length,
+    () => activeDeals.value.filter((deal) => deal.status === 'ACTIVE').length,
   )
 
-  const pendingReviewCount = computed(
-    () =>
-      activeDeals.value.filter(
-        (deal) => deal.status === 'RESPONDED' || deal.status === 'NEGOTIATING',
-      ).length,
-  )
+  const pendingReviewCount = computed(() => 0)
 
   const plannedSpend = computed(() =>
     activeDeals.value.reduce((sum, deal) => {

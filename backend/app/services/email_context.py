@@ -789,7 +789,9 @@ class EmailContextService:
                 campaign_id=deal.campaign_id if deal else None,
                 campaign_name=deal.campaign.name if deal and deal.campaign else None,
                 deal_id=deal_id,
-                deal_influencer_name=deal.influencer.display_name if deal and deal.influencer else None,
+                deal_influencer_name=(
+                    deal.influencer.display_name if deal and deal.influencer else None
+                ),
             )
         return None
 

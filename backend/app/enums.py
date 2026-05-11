@@ -10,10 +10,6 @@ class CampaignStatus(StrEnum):
 
 class DealStatus(StrEnum):
     DRAFT = "DRAFT"
-    APPROVED = "APPROVED"
-    OUTREACHED = "OUTREACHED"
-    RESPONDED = "RESPONDED"
-    NEGOTIATING = "NEGOTIATING"
     ACTIVE = "ACTIVE"
     COMPLETED = "COMPLETED"
     LOST = "LOST"

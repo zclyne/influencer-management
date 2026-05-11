@@ -108,7 +108,8 @@ def test_seeded_deal_graph_and_export_api_smoke(
     assert deals_response.status_code == 200
     deals = deals_response.json()["deals"]
     statuses = {deal["status"] for deal in deals}
-    assert {"ACTIVE", "NEGOTIATING", "OUTREACHED"}.issubset(statuses)
+    assert statuses <= {"DRAFT", "ACTIVE", "COMPLETED", "LOST"}
+    assert "ACTIVE" in statuses
     active_deal = next(deal for deal in deals if deal["id"] == ACTIVE_DEAL_ID)
     assert active_deal["deliverables"]["total_count"] == 2
     assert active_deal["compensation"]["cash_totals"]["USD"] == "8500.00"
