@@ -1,7 +1,7 @@
 services:
   frontend:
     image: oven/bun:1
-    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    user: root
     working_dir: /app/frontend
     command: sh -c "bun install --frozen-lockfile && bun run dev"
     ports:
@@ -30,7 +30,8 @@ services:
     volumes:
       - .:/app
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
   worker:
     image: ghcr.io/astral-sh/uv:python3.12-bookworm
@@ -45,12 +46,18 @@ services:
     volumes:
       - .:/app
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
 
 volumes:
   frontend_node_modules:
