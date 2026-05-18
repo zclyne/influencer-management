@@ -8,6 +8,7 @@ import type {
   InfluencerPlatformSummary,
   ManualInfluencerInput,
 } from '../api/types'
+import EmptyState from '../shared/EmptyState.vue'
 import {
   normalizeInfluencerTags,
   platformColor,
@@ -150,6 +151,17 @@ const campaignSelectOptions = computed(() => [
     value: campaign.id,
   })),
 ])
+
+const hasActiveFilters = computed(() =>
+  Boolean(
+    searchText.value.trim() ||
+      platformFilter.value ||
+      countryFilter.value.trim() ||
+      cityFilter.value.trim() ||
+      tagFilter.value ||
+      includeArchived.value,
+  ),
+)
 
 const rowSelection = computed(() => ({
   selectedRowKeys: selectedRowKeys.value,
@@ -421,6 +433,28 @@ void loadInfluencers()
         :row-selection="rowSelection"
         :scroll="{ x: 1380 }"
       >
+        <template #emptyText>
+          <EmptyState
+            v-if="hasActiveFilters"
+            title="No influencers match these filters"
+            description="Clear search, platform, location, tag, or deleted filters to broaden the library."
+          />
+          <EmptyState
+            v-else
+            title="No influencers yet"
+            description="Import a Modash CSV or create a profile manually to start building the global library."
+          >
+            <template #actions>
+              <RouterLink :to="{ name: 'influencerImport' }">
+                <a-button>Import CSV</a-button>
+              </RouterLink>
+              <a-button type="primary" @click="openCreateModal">
+                <Plus class="button-leading-icon" aria-hidden="true" />
+                New influencer
+              </a-button>
+            </template>
+          </EmptyState>
+        </template>
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'influencer'">
             <div class="influencer-cell">

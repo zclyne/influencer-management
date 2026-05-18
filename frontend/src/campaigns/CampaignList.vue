@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
 import { Plus, Trash2 } from '@lucide/vue'
 import type { CampaignCreateRequest, CampaignResponse, CampaignStatus } from '../api/types'
+import EmptyState from '../shared/EmptyState.vue'
 import { normalizeTags } from '../shared/tags'
 import { campaignStatusLabels, campaignStatuses, useCampaigns } from './useCampaigns'
 
@@ -110,6 +111,10 @@ const statusOptions = computed(() =>
     label: campaignStatusLabels[status],
     value: status,
   })),
+)
+
+const hasActiveFilters = computed(() =>
+  Boolean(searchText.value.trim() || statusFilter.value || tagFilter.value || includeArchived.value),
 )
 
 const rowSelection = computed(() => ({
@@ -322,6 +327,25 @@ void loadCampaigns()
         :row-selection="rowSelection"
         :scroll="{ x: 1300 }"
       >
+        <template #emptyText>
+          <EmptyState
+            v-if="hasActiveFilters"
+            title="No campaigns match these filters"
+            description="Clear search, status, tag, or deleted filters to broaden the campaign list."
+          />
+          <EmptyState
+            v-else
+            title="No campaigns yet"
+            description="Create a campaign to start adding influencers, tracking deals, and exporting progress."
+          >
+            <template #actions>
+              <a-button type="primary" @click="openCreateModal">
+                <Plus class="button-leading-icon" aria-hidden="true" />
+                New campaign
+              </a-button>
+            </template>
+          </EmptyState>
+        </template>
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'campaign'">
             <div class="campaign-cell">

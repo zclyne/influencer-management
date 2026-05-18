@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
 import { Pencil, Plus, Trash2 } from '@lucide/vue'
 import type { BrandCreateRequest, BrandResponse, BrandUpdateRequest } from '../api/types'
+import EmptyState from '../shared/EmptyState.vue'
 import { useBrands } from './useBrands'
 
 interface BrandForm {
@@ -83,6 +84,8 @@ const rowSelection = computed(() => ({
     disabled: Boolean(record.archived_at),
   }),
 }))
+
+const hasActiveFilters = computed(() => Boolean(searchText.value.trim() || includeArchived.value))
 
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat('en-US', {
@@ -250,6 +253,25 @@ void loadBrands()
         :row-selection="rowSelection"
         :scroll="{ x: 960 }"
       >
+        <template #emptyText>
+          <EmptyState
+            v-if="hasActiveFilters"
+            title="No brands match these filters"
+            description="Clear search or deleted filters to see more brand records."
+          />
+          <EmptyState
+            v-else
+            title="No brands yet"
+            description="Create a brand record so campaigns can be grouped by client or product."
+          >
+            <template #actions>
+              <a-button type="primary" @click="openCreateModal">
+                <Plus class="button-leading-icon" aria-hidden="true" />
+                New brand
+              </a-button>
+            </template>
+          </EmptyState>
+        </template>
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'brand'">
             <div class="brand-cell">

@@ -9,11 +9,9 @@ from app.repositories.sqlalchemy import CampaignRepository, DealRepository
 from app.schemas.campaign_exports import CampaignExportFilters
 
 EXPORT_COLUMNS = [
-    "campaign_name",
-    "brand_names",
+    "influencer_display_name",
     "deal_status",
     "lost_reason",
-    "influencer_display_name",
     "influencer_country",
     "influencer_city",
     "primary_platform",
@@ -75,10 +73,10 @@ class CampaignExportService:
         writer = csv.DictWriter(buffer, fieldnames=EXPORT_COLUMNS, lineterminator="\n")
         writer.writeheader()
         for deal in deals:
-            writer.writerow(self._row(campaign, deal))
+            writer.writerow(self._row(deal))
         return buffer.getvalue()
 
-    def _row(self, campaign: models.Campaign, deal: models.Deal) -> dict[str, object]:
+    def _row(self, deal: models.Deal) -> dict[str, object]:
         platform = self._primary_platform(deal.influencer.platforms)
         contact = self._primary_contact(deal.influencer.contacts)
         cash_total = sum(
@@ -92,8 +90,6 @@ class CampaignExportService:
             if item.type in REIMBURSEMENT_TYPES
         )
         return {
-            "campaign_name": campaign.name,
-            "brand_names": "; ".join(link.brand.name for link in campaign.brand_links),
             "deal_status": deal.status,
             "lost_reason": deal.lost_reason or "",
             "influencer_display_name": deal.influencer.display_name,

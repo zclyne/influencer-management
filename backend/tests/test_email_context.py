@@ -10,6 +10,8 @@ from app.repositories.sqlalchemy import CampaignRepository, DealRepository, Infl
 from app.schemas.email_context import EmailThreadBatchRequest, EmailThreadLinkRequest
 from app.services.email_context import (
     EmailContextService,
+    EmailProviderError,
+    EmailReconnectRequired,
     GmailConnector,
     GmailCredential,
     GmailCredentialStore,
@@ -124,6 +126,11 @@ class FakeGmailConnector:
         }
 
 
+class RefreshFailingGmailConnector(FakeGmailConnector):
+    def refresh_access_token(self, credential: GmailCredential) -> GmailCredential:
+        raise EmailProviderError("Google OAuth request failed.")
+
+
 def _store(tmp_path: Path) -> GmailCredentialStore:
     store = GmailCredentialStore(
         tmp_path / "gmail_oauth.json.enc",
@@ -170,6 +177,43 @@ def test_credential_store_persists_single_encrypted_gmail_secret(tmp_path: Path)
     assert loaded is not None
     assert loaded.email == "agency@example.com"
     assert loaded.refresh_token == "refresh-token"
+
+
+def test_auth_status_marks_gmail_reconnect_required_when_refresh_fails(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    service = EmailContextService(
+        db_session,
+        connector=RefreshFailingGmailConnector(),  # type: ignore[arg-type]
+        credential_store=_store(tmp_path),
+    )
+
+    response = service.auth_status()
+
+    assert response.connected is True
+    assert response.email == "agency@example.com"
+    assert response.reconnect_required is True
+
+
+def test_email_operations_request_reconnect_when_gmail_refresh_fails(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    service = EmailContextService(
+        db_session,
+        connector=RefreshFailingGmailConnector(),  # type: ignore[arg-type]
+        credential_store=_store(tmp_path),
+    )
+
+    try:
+        service.list_labels()
+    except EmailReconnectRequired as exc:
+        assert exc.status_code == 401
+        assert exc.code == "email_reconnect_required"
+        assert exc.details == {"email": "agency@example.com"}
+    else:
+        raise AssertionError("Expected EmailReconnectRequired.")
 
 
 def test_link_deal_applies_campaign_and_deal_gmail_labels(
@@ -228,22 +272,16 @@ def test_campaign_filter_uses_existing_gmail_label(
     assert response.threads[0].crm_links[0].campaign_id == campaign_id
     assert response.threads[0].crm_links[0].campaign_name == "Launch"
     assert response.result_size_estimate == 1
-    assert connector.list_thread_calls[-1]["label_ids"] == ["INBOX", "campaign-label"]
+    assert connector.list_thread_calls[-1]["label_ids"] == ["campaign-label"]
+    assert connector.list_thread_calls[-1]["query"] == "in:inbox category:primary"
 
 
-def test_email_view_maps_to_gmail_category_labels(
+def test_email_view_maps_to_gmail_search_query(
     db_session: Session,
     tmp_path: Path,
 ) -> None:
     _create_deal(db_session)
     connector = FakeGmailConnector()
-    connector.labels.append(
-        {
-            "id": "CATEGORY_PROMOTIONS",
-            "name": "CATEGORY_PROMOTIONS",
-            "type": "system",
-        }
-    )
     connector.thread_label_ids["thread-1"] = ["CATEGORY_PROMOTIONS"]
     service = EmailContextService(
         db_session,
@@ -254,7 +292,30 @@ def test_email_view_maps_to_gmail_category_labels(
     response = service.list_threads(view="promotions")
 
     assert response.threads[0].id == "thread-1"
-    assert connector.list_thread_calls[-1]["label_ids"] == ["CATEGORY_PROMOTIONS"]
+    assert connector.list_thread_calls[-1]["label_ids"] == []
+    assert connector.list_thread_calls[-1]["query"] == "in:inbox category:promotions"
+
+
+def test_email_view_combines_gmail_view_query_with_user_search(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    _create_deal(db_session)
+    connector = FakeGmailConnector()
+    service = EmailContextService(
+        db_session,
+        connector=connector,  # type: ignore[arg-type]
+        credential_store=_store(tmp_path),
+    )
+
+    response = service.list_threads(view="primary", query="from:creator@example.com")
+
+    assert response.threads[0].id == "thread-1"
+    assert connector.list_thread_calls[-1]["label_ids"] == []
+    assert (
+        connector.list_thread_calls[-1]["query"]
+        == "in:inbox category:primary from:creator@example.com"
+    )
 
 
 def test_batch_thread_actions_update_gmail_labels(

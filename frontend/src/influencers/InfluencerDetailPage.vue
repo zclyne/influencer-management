@@ -12,6 +12,7 @@ import type {
   InfluencerPlatformResponse,
   InfluencerUpdateRequest,
 } from '../api/types'
+import EmptyState from '../shared/EmptyState.vue'
 import { normalizeInfluencerTags, platformColor, platformOptions } from './useInfluencers'
 import { useInfluencerDetail } from './useInfluencerDetail'
 
@@ -227,6 +228,10 @@ const locationLabel = computed(() => {
 const activeDeals = computed(
   () => influencer.value?.deals.filter((deal) => !deal.archived_at) ?? [],
 )
+
+const primaryContactLabel = computed(() => primaryContact.value?.email ?? 'No contact')
+
+const activeDealCount = computed(() => activeDeals.value.length)
 
 const formatNumber = (value: number | null | undefined) => {
   if (value === null || value === undefined) return 'Not set'
@@ -527,16 +532,27 @@ void loadInfluencerDetail()
 
     <a-spin :spinning="loading">
       <template v-if="influencer">
-        <div class="page-heading">
-          <div>
-            <h1>{{ influencer.display_name }}</h1>
-            <div class="heading-meta">
-              <a-tag v-if="influencer.archived_at" color="red">Deleted</a-tag>
-              <a-tag v-else color="green">Active</a-tag>
+        <section class="profile-hero">
+          <div class="hero-main">
+            <div class="hero-title-row">
+              <h1>{{ influencer.display_name }}</h1>
+              <div class="heading-meta">
+                <a-tag v-if="influencer.archived_at" color="red">Deleted</a-tag>
+                <a-tag v-else color="green">Active</a-tag>
+              </div>
+            </div>
+            <p class="hero-brief">{{ influencer.bio || 'No bio yet.' }}</p>
+            <div class="hero-meta">
+              <strong>{{ locationLabel }}</strong>
+              <span>{{ primaryContactLabel }}</span>
               <span>Updated {{ formatDate(influencer.updated_at) }}</span>
             </div>
           </div>
           <div class="page-actions">
+            <a-button class="action-button-edit" @click="openProfileEdit">
+              <Pencil class="button-leading-icon" aria-hidden="true" />
+              Edit profile
+            </a-button>
             <a-button
               danger
               :disabled="Boolean(influencer.archived_at)"
@@ -546,137 +562,34 @@ void loadInfluencerDetail()
               <Trash2 class="button-leading-icon" aria-hidden="true" />
               Delete
             </a-button>
-            <a-button type="primary" @click="openProfileEdit">
-              <Pencil class="button-leading-icon" aria-hidden="true" />
-              Edit profile
-            </a-button>
           </div>
-        </div>
+        </section>
 
-        <div class="influencer-overview">
-          <a-card size="small">
-            <span>Full name</span>
-            <strong>{{ influencer.full_name || 'Not set' }}</strong>
-          </a-card>
-          <a-card size="small">
-            <span>Location</span>
-            <strong>{{ locationLabel }}</strong>
-          </a-card>
-          <a-card size="small">
-            <span>Primary contact</span>
-            <strong>{{ primaryContact?.email ?? 'No contact' }}</strong>
-          </a-card>
-          <a-card size="small">
-            <span>Platforms</span>
-            <strong>{{ influencer.platforms.length }} linked</strong>
-          </a-card>
-        </div>
+        <div class="profile-workspace-layout">
+          <main class="profile-main">
+            <section class="metrics-strip" aria-label="Influencer metrics">
+              <div class="metric-item">
+                <span>Platforms</span>
+                <strong>{{ influencer.platforms.length }}</strong>
+              </div>
+              <div class="metric-item">
+                <span>Contacts</span>
+                <strong>{{ influencer.contacts.length }}</strong>
+              </div>
+              <div class="metric-item">
+                <span>Campaign deals</span>
+                <strong>{{ activeDealCount }}</strong>
+              </div>
+              <div class="metric-item">
+                <span>Primary contact</span>
+                <strong>{{ primaryContact ? 'Set' : 'Missing' }}</strong>
+              </div>
+            </section>
 
-        <div class="profile-info-grid">
-          <a-card class="bio-card section-card" size="small">
-            <template #title>Bio</template>
-            <p>{{ influencer.bio || 'No bio yet.' }}</p>
-          </a-card>
-
-          <a-card class="section-card">
-            <template #title>Tags</template>
-            <template #extra>
-              <a-button @click="openTagsEdit">
-                <Pencil class="button-leading-icon" aria-hidden="true" />
-                Edit
-              </a-button>
-            </template>
-            <div v-if="influencer.tags.length" class="tag-row">
-              <a-tag v-for="tag in influencer.tags" :key="tag">{{ tag }}</a-tag>
-            </div>
-            <span v-else class="muted">No tags</span>
-          </a-card>
-
-          <a-card class="section-card">
-            <template #title>Contacts</template>
-            <template #extra>
-              <a-button @click="openCreateContact">
-                <Plus class="button-leading-icon" aria-hidden="true" />
-                Add contact
-              </a-button>
-            </template>
-            <a-table
-              :columns="contactColumns"
-              :data-source="influencer.contacts"
-              :pagination="false"
-              :row-key="(record: InfluencerContactResponse) => record.id"
-              :scroll="{ x: 720 }"
-              size="small"
-            >
-              <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'contact'">
-                  <strong>{{ record.email }}</strong>
-                  <p v-if="record.name" class="cell-note">{{ record.name }}</p>
-                  <p v-if="record.conflict_influencer_ids.length" class="cell-warning">
-                    Same email on {{ record.conflict_influencer_ids.length }} other influencer(s)
-                  </p>
-                </template>
-                <template v-else-if="column.key === 'role'">
-                  {{ roleLabel(record.role) }}
-                </template>
-                <template v-else-if="column.key === 'primary'">
-                  <a-tag v-if="record.is_primary" color="green">Yes</a-tag>
-                  <span v-else>No</span>
-                </template>
-                <template v-else-if="column.key === 'source'">
-                  {{ record.source || 'Not set' }}
-                </template>
-                <template v-else-if="column.key === 'actions'">
-                  <a-space>
-                    <a-button
-                      class="table-action-icon"
-                      type="text"
-                      title="Edit contact"
-                      aria-label="Edit contact"
-                      @click="openEditContact(record)"
-                    >
-                      <Pencil aria-hidden="true" />
-                    </a-button>
-                    <a-popconfirm
-                      title="Delete this contact?"
-                      ok-text="Delete"
-                      cancel-text="Cancel"
-                      @confirm="removeContact(record)"
-                    >
-                      <a-button
-                        class="table-action-icon"
-                        danger
-                        type="text"
-                        title="Delete contact"
-                        aria-label="Delete contact"
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </a-button>
-                    </a-popconfirm>
-                  </a-space>
-                </template>
-              </template>
-            </a-table>
-          </a-card>
-
-          <a-card class="section-card">
-            <template #title>Notes</template>
-            <template #extra>
-              <a-button @click="openNotesEdit">
-                <Pencil class="button-leading-icon" aria-hidden="true" />
-                Edit
-              </a-button>
-            </template>
-            <p v-if="influencer.notes" class="notes-content">{{ influencer.notes }}</p>
-            <span v-else class="muted">No notes yet.</span>
-          </a-card>
-        </div>
-
-        <div class="content-grid">
           <a-card class="section-card platform-card">
-            <template #title>Platform identities</template>
+            <template #title>Platform Identities</template>
             <template #extra>
-              <a-button @click="openCreatePlatform">
+              <a-button class="action-button-add" @click="openCreatePlatform">
                 <Plus class="button-leading-icon" aria-hidden="true" />
                 Add platform
               </a-button>
@@ -689,6 +602,19 @@ void loadInfluencerDetail()
               :scroll="{ x: 900 }"
               size="small"
             >
+              <template #emptyText>
+                <EmptyState
+                  title="No platform identities yet"
+                  description="Add social handles so the profile can be matched, evaluated, and reused in campaigns."
+                >
+                  <template #actions>
+                    <a-button class="action-button-add" @click="openCreatePlatform">
+                      <Plus class="button-leading-icon" aria-hidden="true" />
+                      Add platform
+                    </a-button>
+                  </template>
+                </EmptyState>
+              </template>
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'platform'">
                   <a-tag :color="platformColor(record.platform)">
@@ -749,7 +675,87 @@ void loadInfluencerDetail()
           </a-card>
 
           <a-card class="section-card">
-            <template #title>Campaign deals</template>
+            <template #title>Contacts</template>
+            <template #extra>
+              <a-button class="action-button-add" @click="openCreateContact">
+                <Plus class="button-leading-icon" aria-hidden="true" />
+                Add contact
+              </a-button>
+            </template>
+            <a-table
+              :columns="contactColumns"
+              :data-source="influencer.contacts"
+              :pagination="false"
+              :row-key="(record: InfluencerContactResponse) => record.id"
+              :scroll="{ x: 720 }"
+              size="small"
+            >
+              <template #emptyText>
+                <EmptyState
+                  title="No contacts yet"
+                  description="Add a manager, creator, or agency contact for outreach and campaign coordination."
+                >
+                  <template #actions>
+                    <a-button class="action-button-add" @click="openCreateContact">
+                      <Plus class="button-leading-icon" aria-hidden="true" />
+                      Add contact
+                    </a-button>
+                  </template>
+                </EmptyState>
+              </template>
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'contact'">
+                  <strong>{{ record.email }}</strong>
+                  <p v-if="record.name" class="cell-note">{{ record.name }}</p>
+                  <p v-if="record.conflict_influencer_ids.length" class="cell-warning">
+                    Same email on {{ record.conflict_influencer_ids.length }} other influencer(s)
+                  </p>
+                </template>
+                <template v-else-if="column.key === 'role'">
+                  {{ roleLabel(record.role) }}
+                </template>
+                <template v-else-if="column.key === 'primary'">
+                  <a-tag v-if="record.is_primary" color="green">Yes</a-tag>
+                  <span v-else>No</span>
+                </template>
+                <template v-else-if="column.key === 'source'">
+                  {{ record.source || 'Not set' }}
+                </template>
+                <template v-else-if="column.key === 'actions'">
+                  <a-space>
+                    <a-button
+                      class="table-action-icon"
+                      type="text"
+                      title="Edit contact"
+                      aria-label="Edit contact"
+                      @click="openEditContact(record)"
+                    >
+                      <Pencil aria-hidden="true" />
+                    </a-button>
+                    <a-popconfirm
+                      title="Delete this contact?"
+                      ok-text="Delete"
+                      cancel-text="Cancel"
+                      @confirm="removeContact(record)"
+                    >
+                      <a-button
+                        class="table-action-icon"
+                        danger
+                        type="text"
+                        title="Delete contact"
+                        aria-label="Delete contact"
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </a-button>
+                    </a-popconfirm>
+                  </a-space>
+                </template>
+              </template>
+            </a-table>
+          </a-card>
+
+          <a-card class="section-card">
+            <template #title>Campaign Deals</template>
             <a-table
               :columns="dealColumns"
               :data-source="activeDeals"
@@ -758,6 +764,12 @@ void loadInfluencerDetail()
               :scroll="{ x: 760 }"
               size="small"
             >
+              <template #emptyText>
+                <EmptyState
+                  title="No campaign deals yet"
+                  description="This influencer has not been added to any campaign workspace."
+                />
+              </template>
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'campaign'">
                   <strong>{{ record.campaign_name || 'Campaign' }}</strong>
@@ -784,6 +796,53 @@ void loadInfluencerDetail()
               </template>
             </a-table>
           </a-card>
+          </main>
+
+          <aside class="profile-sidebar">
+            <a-card class="side-card identity-card" size="small">
+              <template #title>Profile</template>
+              <div class="property-list">
+                <div>
+                  <span>Full name</span>
+                  <strong>{{ influencer.full_name || 'Not set' }}</strong>
+                </div>
+                <div>
+                  <span>Location</span>
+                  <strong>{{ locationLabel }}</strong>
+                </div>
+                <div>
+                  <span>Primary contact</span>
+                  <strong>{{ primaryContactLabel }}</strong>
+                </div>
+              </div>
+            </a-card>
+
+            <a-card class="side-card" size="small">
+              <template #title>Tags</template>
+              <template #extra>
+                <a-button class="action-button-edit" @click="openTagsEdit">
+                  <Pencil class="button-leading-icon" aria-hidden="true" />
+                  Edit
+                </a-button>
+              </template>
+              <div v-if="influencer.tags.length" class="tag-row">
+                <a-tag v-for="tag in influencer.tags" :key="tag">{{ tag }}</a-tag>
+              </div>
+              <span v-else class="muted">No tags</span>
+            </a-card>
+
+            <a-card class="side-card" size="small">
+              <template #title>Notes</template>
+              <template #extra>
+                <a-button class="action-button-edit" @click="openNotesEdit">
+                  <Pencil class="button-leading-icon" aria-hidden="true" />
+                  Edit
+                </a-button>
+              </template>
+              <p v-if="influencer.notes" class="notes-content">{{ influencer.notes }}</p>
+              <span v-else class="muted">No notes yet.</span>
+            </a-card>
+          </aside>
         </div>
       </template>
 
@@ -963,24 +1022,19 @@ void loadInfluencerDetail()
   border-radius: 8px;
 }
 
-.page-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
 .profile-main,
-.profile-side {
+.profile-sidebar {
   display: grid;
   align-content: start;
   gap: 14px;
+  min-width: 0;
 }
 
 h1 {
   margin: 0;
   color: #20262d;
   font-size: 30px;
+  font-weight: 600;
   line-height: 1.2;
 }
 
@@ -1015,43 +1069,106 @@ h1 {
 }
 
 .heading-meta {
-  margin-top: 10px;
   color: #58636f;
 }
 
 .page-actions {
+  align-items: flex-start;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 
-.influencer-overview {
+.profile-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 24px;
+  border: 1px solid #dde6ef;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgb(25 45 70 / 6%);
+}
+
+.hero-main {
   display: grid;
-  grid-template-columns: repeat(4, minmax(160px, 1fr));
   gap: 12px;
-}
-
-.influencer-overview :deep(.ant-card-body) {
-  display: grid;
-  gap: 6px;
   min-width: 0;
 }
 
-.influencer-overview span {
+.hero-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hero-brief {
+  max-width: 820px;
+  margin: 0;
+  color: #2f3a45;
+  font-size: 16px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.hero-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   color: #697582;
 }
 
-.influencer-overview strong {
+.hero-meta strong {
+  color: #34424f;
+  font-weight: 500;
+}
+
+.hero-meta span::before {
+  content: "·";
+  margin-right: 8px;
+  color: #9aa6b2;
+}
+
+.profile-workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+  gap: 18px;
+}
+
+.metrics-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #e2e8f0;
+}
+
+.metric-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: #ffffff;
+}
+
+.metric-item span {
+  color: #697582;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.metric-item strong {
   min-width: 0;
   overflow-wrap: anywhere;
   color: #20262d;
-  font-size: 15px;
-  line-height: 1.4;
-}
-
-.bio-card p {
-  margin: 0;
-  color: #3f4954;
-  line-height: 1.6;
-  white-space: pre-wrap;
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1.2;
 }
 
 .cell-note,
@@ -1065,34 +1182,9 @@ h1 {
   line-height: 1.5;
 }
 
-.profile-info-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
-  align-items: stretch;
-}
-
-.content-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-}
-
 .section-card {
   min-width: 0;
   overflow: hidden;
-}
-
-.profile-info-grid .section-card {
-  height: 100%;
-}
-
-.profile-info-grid .section-card :deep(.ant-card) {
-  height: 100%;
-}
-
-.profile-info-grid .section-card :deep(.ant-card-body) {
-  height: calc(100% - 48px);
 }
 
 .section-card :deep(.ant-card-body) {
@@ -1103,6 +1195,52 @@ h1 {
 .section-card :deep(.ant-table-wrapper) {
   max-width: 100%;
   min-width: 0;
+}
+
+.side-card {
+  min-width: 0;
+}
+
+.side-card :deep(.ant-card-head) {
+  min-height: 42px;
+}
+
+.side-card :deep(.ant-card-head-title) {
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.section-card :deep(.ant-card-head-title) {
+  font-weight: 600;
+}
+
+.property-list {
+  display: grid;
+  gap: 12px;
+}
+
+.property-list div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.property-list span {
+  color: #697582;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.property-list strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #20262d;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.section-card strong {
+  font-weight: 500;
 }
 
 .cell-note {
@@ -1141,16 +1279,23 @@ h1 {
 }
 
 @media (max-width: 980px) {
-  .influencer-overview {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .profile-info-grid {
+  .profile-hero,
+  .profile-workspace-layout {
+    display: grid;
     grid-template-columns: 1fr;
   }
 
-  .content-grid {
-    grid-template-columns: 1fr;
+  .page-actions {
+    justify-content: flex-start;
+  }
+
+  .metrics-strip {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
+  .hero-meta span::before {
+    content: none;
+    margin-right: 0;
   }
 
   .form-grid {
@@ -1159,8 +1304,20 @@ h1 {
 }
 
 @media (max-width: 640px) {
-  .influencer-overview {
+  .profile-hero {
+    padding: 18px;
+  }
+
+  .metrics-strip {
     grid-template-columns: 1fr;
+  }
+
+  .page-actions {
+    display: grid;
+  }
+
+  .page-actions button {
+    width: 100%;
   }
 }
 </style>

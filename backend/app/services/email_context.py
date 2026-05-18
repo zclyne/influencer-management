@@ -49,14 +49,15 @@ GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.modify",
 ]
 CRM_LABEL_ROOT = "CreatorFlow"
-EMAIL_VIEW_LABELS = {
-    "promotions": ["CATEGORY_PROMOTIONS"],
-    "social": ["CATEGORY_SOCIAL"],
-    "updates": ["CATEGORY_UPDATES"],
-    "forums": ["CATEGORY_FORUMS"],
-    "starred": ["STARRED"],
-    "deleted": ["TRASH"],
-    "spam": ["SPAM"],
+EMAIL_VIEW_QUERIES = {
+    "primary": "in:inbox category:primary",
+    "promotions": "in:inbox category:promotions",
+    "social": "in:inbox category:social",
+    "updates": "in:inbox category:updates",
+    "forums": "in:inbox category:forums",
+    "starred": "is:starred",
+    "deleted": "in:trash",
+    "spam": "in:spam",
 }
 
 
@@ -77,6 +78,10 @@ class EmailNotConfigured(EmailContextServiceError):
 class EmailNotConnected(EmailContextServiceError):
     code = "email_not_connected"
     status_code = 401
+
+
+class EmailReconnectRequired(EmailNotConnected):
+    code = "email_reconnect_required"
 
 
 class EmailNotFound(EmailContextServiceError):
@@ -423,6 +428,11 @@ def _auth_headers(access_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
 
 
+def _combine_gmail_queries(*queries: str | None) -> str | None:
+    combined = " ".join(query.strip() for query in queries if query and query.strip())
+    return combined or None
+
+
 class EmailContextService:
     def __init__(
         self,
@@ -446,6 +456,17 @@ class EmailContextService:
         credential = self.credential_store.read()
         if not credential:
             return GmailAuthStatusResponse(connected=False)
+        try:
+            credential = self.connector.refresh_access_token(credential)
+        except EmailProviderError:
+            return GmailAuthStatusResponse(
+                connected=True,
+                email=credential.email,
+                google_subject=credential.google_subject,
+                scopes=credential.scopes,
+                expires_at=credential.expires_at,
+                reconnect_required=True,
+            )
         return GmailAuthStatusResponse(
             connected=True,
             email=credential.email,
@@ -490,19 +511,19 @@ class EmailContextService:
     ) -> GmailThreadListResponse:
         credential = self._credential()
         labels = self._labels(credential)
+        view_query = self._view_query(view or "primary")
         label_ids = self._filter_label_ids(
             labels,
             campaign_id=campaign_id,
             deal_id=deal_id,
             label=label,
-            view=view,
         )
         if label_ids is None:
             return GmailThreadListResponse(threads=[])
         payload = self.connector.list_threads(
             credential.access_token or "",
             label_ids=label_ids,
-            query=query,
+            query=_combine_gmail_queries(view_query, query),
             page_token=page_token,
             page_size=max(1, min(page_size, 50)),
         )
@@ -635,7 +656,13 @@ class EmailContextService:
         credential = self.credential_store.read()
         if not credential:
             raise EmailNotConnected("Gmail is not connected.")
-        return self.connector.refresh_access_token(credential)
+        try:
+            return self.connector.refresh_access_token(credential)
+        except EmailProviderError as exc:
+            raise EmailReconnectRequired(
+                "Gmail authorization expired or failed. Sign in with Google again.",
+                details={"email": credential.email},
+            ) from exc
 
     def _labels(self, credential: GmailCredential | None = None) -> list[dict[str, Any]]:
         credential = credential or self._credential()
@@ -648,11 +675,7 @@ class EmailContextService:
         campaign_id: str | None,
         deal_id: str | None,
         label: str | None,
-        view: str | None,
     ) -> list[str] | None:
-        view_label_ids = self._view_label_ids(labels, view or "primary")
-        if view_label_ids is None:
-            return None
         filter_label_ids: list[str] = []
         if deal_id:
             self._require_deal(deal_id)
@@ -671,31 +694,16 @@ class EmailContextService:
             if not requested:
                 return None
             filter_label_ids.append(str(requested["id"]))
-        return sorted(set(view_label_ids + filter_label_ids))
+        return sorted(set(filter_label_ids))
 
-    def _view_label_ids(self, labels: list[dict[str, Any]], view: str) -> list[str] | None:
+    def _view_query(self, view: str) -> str:
         normalized = view.strip().lower()
-        if normalized == "primary":
-            inbox = self._find_label(labels, "INBOX")
-            if not inbox:
-                return None
-            category = self._find_label(labels, "CATEGORY_PERSONAL")
-            label_ids = [str(inbox["id"])]
-            if category:
-                label_ids.append(str(category["id"]))
-            return label_ids
-        if normalized not in EMAIL_VIEW_LABELS:
+        if normalized not in EMAIL_VIEW_QUERIES:
             raise EmailContextServiceError(
                 "Unsupported email view.",
-                details={"view": view, "supported": ["primary", *EMAIL_VIEW_LABELS.keys()]},
+                details={"view": view, "supported": list(EMAIL_VIEW_QUERIES)},
             )
-        label_ids: list[str] = []
-        for label_name in EMAIL_VIEW_LABELS[normalized]:
-            label = self._find_label(labels, label_name)
-            if not label:
-                return None
-            label_ids.append(str(label["id"]))
-        return label_ids
+        return EMAIL_VIEW_QUERIES[normalized]
 
     def _thread_summary(
         self,

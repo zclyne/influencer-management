@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
-import { Pencil, Plus, Trash2 } from '@lucide/vue'
+import { Download, Mail, Paperclip, Pencil, Plus, Trash2 } from '@lucide/vue'
 import type {
   CampaignStatus,
   CampaignUpdateRequest,
@@ -17,6 +17,7 @@ import {
   platformOptions as libraryPlatformOptions,
   useInfluencers,
 } from '../influencers/useInfluencers'
+import EmptyState from '../shared/EmptyState.vue'
 import { normalizeTags } from '../shared/tags'
 import {
   dealStatuses,
@@ -49,6 +50,8 @@ const showOnlyAvailableInfluencers = ref(true)
 const campaignEditOpen = ref(false)
 const tagsModalOpen = ref(false)
 const bulkStatus = ref<DealStatus | undefined>()
+const notesExpanded = ref(false)
+const notesPreviewLimit = 180
 
 const campaignForm = reactive<CampaignEditForm>({
   name: '',
@@ -277,6 +280,18 @@ const filteredInfluencers = computed(() => {
   return influencers.value.filter((influencer) => !isInfluencerAlreadyInCampaign(influencer.id))
 })
 
+const hasDealFilters = computed(() =>
+  Boolean(searchText.value.trim() || statusFilter.value || platformFilter.value || includeArchived.value),
+)
+
+const hasLibraryFilters = computed(() =>
+  Boolean(
+    influencerSearchText.value.trim() ||
+      influencerPlatformFilter.value ||
+      (showOnlyAvailableInfluencers.value && influencers.value.length > 0),
+  ),
+)
+
 const statusColor = (status: DealStatus) => {
   if (status === 'ACTIVE') return 'green'
   if (status === 'COMPLETED') return 'blue'
@@ -298,6 +313,16 @@ const campaignStatusLabel = (status: CampaignStatus) => campaignStatusLabels[sta
 const brandLabel = computed(() => {
   if (!campaign.value?.brands.length) return 'No brands'
   return campaign.value.brands.map((link) => link.brand.name).join(', ')
+})
+
+const campaignNotes = computed(() => campaign.value?.notes?.trim() ?? '')
+
+const hasLongNotes = computed(() => campaignNotes.value.length > notesPreviewLimit)
+
+const displayedNotes = computed(() => {
+  if (!campaignNotes.value) return 'No notes yet.'
+  if (!hasLongNotes.value || notesExpanded.value) return campaignNotes.value
+  return `${campaignNotes.value.slice(0, notesPreviewLimit).trim()}...`
 })
 
 const resetCampaignForm = () => {
@@ -483,6 +508,7 @@ const downloadExport = async () => {
 
 watch(campaignId, () => {
   selectedRowKeys.value = []
+  notesExpanded.value = false
   selectDeal(null)
   void loadWorkspace()
 })
@@ -510,111 +536,94 @@ void loadWorkspace()
       <a-breadcrumb-item>{{ campaign?.name ?? 'Campaign workspace' }}</a-breadcrumb-item>
     </a-breadcrumb>
 
-    <div class="page-heading">
-      <div>
-        <h1>{{ campaign?.name ?? 'Campaign workspace' }}</h1>
-        <div v-if="campaign" class="campaign-status-row">
-          <a-tag :color="campaignStatusColor(campaign.status)">
-            {{ campaignStatusLabel(campaign.status) }}
-          </a-tag>
-          <a-tag v-if="campaign.archived_at" color="red">Deleted</a-tag>
+    <a-alert v-if="error" class="page-alert" type="error" :message="error" show-icon />
+
+    <section v-if="campaign" class="campaign-hero">
+      <div class="hero-main">
+        <div class="hero-title-row">
+          <h1>{{ campaign.name }}</h1>
+          <div class="campaign-status-row">
+            <a-tag :color="campaignStatusColor(campaign.status)">
+              {{ campaignStatusLabel(campaign.status) }}
+            </a-tag>
+            <a-tag v-if="campaign.archived_at" color="red">Deleted</a-tag>
+          </div>
+        </div>
+        <p class="hero-brief">{{ campaign.brief || 'No brief yet.' }}</p>
+        <div class="hero-meta">
+          <strong>{{ brandLabel }}</strong>
+          <span>{{ formatDateRange() }}</span>
           <span>Updated {{ formatDate(campaign.updated_at) }}</span>
         </div>
       </div>
       <div class="page-actions">
         <RouterLink :to="{ name: 'email', query: { campaignId } }">
-          <a-button>Open email</a-button>
+          <a-button>
+            <Mail class="button-leading-icon" aria-hidden="true" />
+            Open email
+          </a-button>
         </RouterLink>
-        <a-button :loading="exporting" @click="downloadExport">Export view</a-button>
-        <a-button type="primary" :disabled="!campaign || Boolean(campaign.archived_at)" @click="openCampaignEdit">
+        <a-button
+          class="action-button-edit"
+          :disabled="Boolean(campaign.archived_at)"
+          @click="openCampaignEdit"
+        >
           <Pencil class="button-leading-icon" aria-hidden="true" />
-          Edit campaign
+          Edit
         </a-button>
         <a-button
           danger
-          :disabled="!campaign || Boolean(campaign.archived_at)"
+          :disabled="Boolean(campaign.archived_at)"
           :loading="mutating"
           @click="confirmCampaignDelete"
         >
           <Trash2 class="button-leading-icon" aria-hidden="true" />
-          Delete campaign
+          Delete
         </a-button>
       </div>
-    </div>
+    </section>
 
-    <a-alert v-if="error" class="page-alert" type="error" :message="error" show-icon />
+    <div class="campaign-workspace-layout" :class="{ 'without-sidebar': !campaign }">
+      <main class="campaign-main">
+        <section class="metrics-strip" aria-label="Campaign metrics">
+          <div class="metric-item">
+            <span>Deals</span>
+            <strong>{{ totalDealCount }}</strong>
+          </div>
+          <div class="metric-item">
+            <span>In progress</span>
+            <strong>{{ inProgressDealCount }}</strong>
+          </div>
+          <div class="metric-item">
+            <span>Pending review</span>
+            <strong>{{ pendingReviewCount }}</strong>
+          </div>
+          <div class="metric-item">
+            <span>Planned spend</span>
+            <strong>{{ formatCurrency(plannedSpend) }}</strong>
+          </div>
+        </section>
 
-    <div v-if="campaign" class="campaign-overview">
-      <a-card size="small">
-        <span>Budget</span>
-        <strong>{{ formatCurrency(campaign.budget) }}</strong>
-      </a-card>
-      <a-card size="small">
-        <span>Timeline</span>
-        <strong>{{ formatDateRange() }}</strong>
-      </a-card>
-      <a-card size="small">
-        <span>Brands</span>
-        <strong>{{ brandLabel }}</strong>
-      </a-card>
-      <a-card size="small">
-        <span>Notes</span>
-        <strong>{{ campaign.notes || 'No notes' }}</strong>
-      </a-card>
-    </div>
-
-    <a-card v-if="campaign" class="campaign-brief-card" size="small">
-      <template #title>Brief</template>
-      <p>{{ campaign.brief || 'No brief yet.' }}</p>
-    </a-card>
-
-    <a-card v-if="campaign" class="campaign-tags-card" size="small">
-      <template #title>Tags</template>
-      <template #extra>
-        <a-button :disabled="Boolean(campaign.archived_at)" @click="openTagsEdit">
-          <Pencil class="button-leading-icon" aria-hidden="true" />
-          Edit
-        </a-button>
-      </template>
-      <div v-if="campaign.tags.length" class="tag-row">
-        <a-tag v-for="tag in campaign.tags" :key="tag">{{ tag }}</a-tag>
-      </div>
-      <span v-else class="muted">No tags</span>
-    </a-card>
-
-    <div class="summary-grid">
-      <a-card size="small">
-        <span>Deals</span>
-        <strong>{{ totalDealCount }}</strong>
-      </a-card>
-      <a-card size="small">
-        <span>In progress</span>
-        <strong>{{ inProgressDealCount }}</strong>
-      </a-card>
-      <a-card size="small">
-        <span>Pending review</span>
-        <strong>{{ pendingReviewCount }}</strong>
-      </a-card>
-      <a-card size="small">
-        <span>Planned spend</span>
-        <strong>{{ formatCurrency(plannedSpend) }}</strong>
-      </a-card>
-    </div>
-
-    <a-card class="table-card" :body-style="{ padding: '0' }">
+        <a-card class="table-card" :body-style="{ padding: '0' }">
       <div class="table-title-row">
         <div>
           <h2>Deals</h2>
           <p>Add influencers from the library to create campaign deals.</p>
         </div>
-        <a-button
-          type="primary"
-          :disabled="!campaign || Boolean(campaign.archived_at)"
-          @click="openAddFromLibrary"
-        >
-          <Plus class="button-leading-icon" aria-hidden="true" />
-          Add influencers from library
-        </a-button>
+        <div class="table-title-actions">
+          <a-button :loading="exporting" @click="downloadExport">
+            <Download class="button-leading-icon" aria-hidden="true" />
+            Export view
+          </a-button>
+          <a-button
+            class="action-button-add"
+            :disabled="!campaign || Boolean(campaign.archived_at)"
+            @click="openAddFromLibrary"
+          >
+            <Plus class="button-leading-icon" aria-hidden="true" />
+            Add influencers from library
+          </a-button>
+        </div>
       </div>
 
       <div class="table-toolbar">
@@ -660,11 +669,11 @@ void loadWorkspace()
             danger
             :disabled="!selectedRowKeys.length || mutating"
             :loading="mutating"
-          @click="confirmBulkArchive"
-        >
-          <Trash2 class="button-leading-icon" aria-hidden="true" />
-          Delete selected
-        </a-button>
+            @click="confirmBulkArchive"
+          >
+            <Trash2 class="button-leading-icon" aria-hidden="true" />
+            Delete selected
+          </a-button>
         </div>
       </div>
 
@@ -677,6 +686,29 @@ void loadWorkspace()
         :row-selection="rowSelection"
         :scroll="{ x: 1400 }"
       >
+        <template #emptyText>
+          <EmptyState
+            v-if="hasDealFilters"
+            title="No deals match these filters"
+            description="Clear search, status, platform, or deleted filters to broaden this campaign view."
+          />
+          <EmptyState
+            v-else
+            title="No deals yet"
+            description="Add influencers from the library to create campaign-specific deal rows."
+          >
+            <template #actions>
+              <a-button
+                class="action-button-add"
+                :disabled="!campaign || Boolean(campaign.archived_at)"
+                @click="openAddFromLibrary"
+              >
+                <Plus class="button-leading-icon" aria-hidden="true" />
+                Add influencers from library
+              </a-button>
+            </template>
+          </EmptyState>
+        </template>
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'creator'">
             <div class="creator-cell">
@@ -748,7 +780,62 @@ void loadWorkspace()
           </template>
         </template>
       </a-table>
-    </a-card>
+        </a-card>
+      </main>
+
+      <aside v-if="campaign" class="campaign-sidebar">
+        <a-card class="side-card budget-card" size="small">
+          <template #title>Budget</template>
+          <strong>{{ formatCurrency(campaign.budget) }}</strong>
+        </a-card>
+
+        <a-card class="side-card" size="small">
+          <template #title>Tags</template>
+          <template #extra>
+            <a-button
+              class="action-button-edit"
+              :disabled="Boolean(campaign.archived_at)"
+              @click="openTagsEdit"
+            >
+              <Pencil class="button-leading-icon" aria-hidden="true" />
+              Edit
+            </a-button>
+          </template>
+          <div v-if="campaign.tags.length" class="tag-row">
+            <a-tag v-for="tag in campaign.tags" :key="tag">{{ tag }}</a-tag>
+          </div>
+          <span v-else class="muted">No tags</span>
+        </a-card>
+
+        <a-card class="side-card" size="small">
+          <template #title>Notes</template>
+          <p class="notes-preview">{{ displayedNotes }}</p>
+          <a-button
+            v-if="hasLongNotes"
+            type="link"
+            class="notes-toggle"
+            @click="notesExpanded = !notesExpanded"
+          >
+            {{ notesExpanded ? 'Show less' : 'Show more' }}
+          </a-button>
+        </a-card>
+
+        <a-card class="side-card attachments-card" size="small">
+          <template #title>Attachments</template>
+          <div class="attachments-placeholder">
+            <Paperclip class="attachments-icon" aria-hidden="true" />
+            <div>
+              <strong>No attachments yet</strong>
+              <span>Campaign attachments are not available yet.</span>
+            </div>
+          </div>
+          <a-button disabled block>
+            <Plus class="button-leading-icon" aria-hidden="true" />
+            Upload
+          </a-button>
+        </a-card>
+      </aside>
+    </div>
 
     <a-modal
       v-model:open="campaignEditOpen"
@@ -873,6 +960,18 @@ void loadWorkspace()
         :scroll="{ x: 760 }"
         size="small"
       >
+        <template #emptyText>
+          <EmptyState
+            v-if="hasLibraryFilters"
+            title="No available influencers match"
+            description="Clear the modal search, platform filter, or Only not added toggle to see more library profiles."
+          />
+          <EmptyState
+            v-else
+            title="No influencers in the library"
+            description="Create or import influencers before adding them to a campaign."
+          />
+        </template>
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'influencer'">
             <div class="creator-cell">
@@ -926,17 +1025,12 @@ void loadWorkspace()
   gap: 18px;
 }
 
-.page-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
 h1 {
   margin: 0;
   color: #20262d;
   font-size: 30px;
+  font-weight: 600;
+  line-height: 1.15;
 }
 
 .button-leading-icon {
@@ -960,18 +1054,13 @@ h1 {
   height: 16px;
 }
 
-.page-description {
-  max-width: 720px;
-  margin: 8px 0 0;
-  color: #58636f;
-  line-height: 1.5;
-}
-
 .page-actions {
   display: flex;
+  align-items: flex-start;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .campaign-status-row {
@@ -979,7 +1068,6 @@ h1 {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
   color: #697582;
 }
 
@@ -987,60 +1075,184 @@ h1 {
   border-radius: 8px;
 }
 
-.campaign-overview {
+.campaign-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 24px;
+  border: 1px solid #dde6ef;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgb(25 45 70 / 6%);
+}
+
+.hero-main {
   display: grid;
-  grid-template-columns: repeat(4, minmax(160px, 1fr));
   gap: 12px;
-}
-
-.campaign-overview :deep(.ant-card-body) {
-  display: grid;
-  gap: 6px;
   min-width: 0;
 }
 
-.campaign-overview span {
-  color: #697582;
+.hero-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.campaign-overview strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  color: #20262d;
-  font-size: 15px;
-  line-height: 1.4;
-}
-
-.campaign-brief-card p {
+.hero-brief {
+  max-width: 820px;
   margin: 0;
-  color: #3f4954;
-  line-height: 1.6;
+  color: #2f3a45;
+  font-size: 16px;
+  line-height: 1.55;
   white-space: pre-wrap;
 }
 
-.campaign-tags-card :deep(.ant-card-body) {
+.hero-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #697582;
+}
+
+.hero-meta strong {
+  color: #34424f;
+  font-weight: 500;
+}
+
+.hero-meta span::before {
+  content: "·";
+  margin-right: 8px;
+  color: #9aa6b2;
+}
+
+.campaign-workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+  gap: 18px;
+}
+
+.campaign-workspace-layout.without-sidebar {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.campaign-main,
+.campaign-sidebar {
+  display: grid;
+  gap: 14px;
   min-width: 0;
 }
 
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(160px, 1fr));
-  gap: 12px;
-}
-
-.summary-grid :deep(.ant-card-body) {
-  display: grid;
-  gap: 6px;
-}
-
-.summary-grid span,
 .muted {
   color: #697582;
 }
 
-.summary-grid strong {
+.metrics-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #e2e8f0;
+}
+
+.metric-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: #ffffff;
+}
+
+.metric-item span {
+  color: #697582;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.metric-item strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: #20262d;
-  font-size: 26px;
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.side-card {
+  min-width: 0;
+}
+
+.side-card :deep(.ant-card-head) {
+  min-height: 42px;
+}
+
+.side-card :deep(.ant-card-head-title) {
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.side-card :deep(.ant-card-body) {
+  min-width: 0;
+}
+
+.budget-card strong {
+  color: #20262d;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.notes-preview {
+  margin: 0;
+  color: #3f4954;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.notes-toggle {
+  height: auto;
+  margin-top: 6px;
+  padding: 0;
+}
+
+.attachments-card :deep(.ant-card-body) {
+  display: grid;
+  gap: 12px;
+}
+
+.attachments-placeholder {
+  display: flex;
+  gap: 10px;
+  color: #697582;
+}
+
+.attachments-placeholder div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.attachments-placeholder strong {
+  color: #34424f;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.attachments-placeholder span {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.attachments-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
 }
 
 .table-card {
@@ -1074,11 +1286,21 @@ h1 {
   margin: 0;
   color: #20262d;
   font-size: 18px;
+  font-weight: 600;
 }
 
 .table-title-row p {
   margin: 4px 0 0;
   color: #697582;
+}
+
+.table-title-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .table-toolbar {
@@ -1137,7 +1359,7 @@ h1 {
 
 .creator-cell a {
   color: #175fcb;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .creator-cell span {
@@ -1169,10 +1391,12 @@ h1 {
 }
 
 @media (max-width: 980px) {
-  .page-heading,
+  .campaign-hero,
+  .campaign-workspace-layout,
   .table-title-row,
   .table-toolbar {
     display: grid;
+    grid-template-columns: 1fr;
   }
 
   .page-actions,
@@ -1185,15 +1409,22 @@ h1 {
     justify-content: flex-start;
   }
 
-  .campaign-overview,
-  .summary-grid {
+  .metrics-strip {
     grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
+  .hero-meta span::before {
+    content: none;
+    margin-right: 0;
   }
 }
 
 @media (max-width: 640px) {
-  .campaign-overview,
-  .summary-grid {
+  .campaign-hero {
+    padding: 18px;
+  }
+
+  .metrics-strip {
     grid-template-columns: 1fr;
   }
 

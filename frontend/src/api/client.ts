@@ -98,8 +98,28 @@ const toQueryString = (params: Record<string, string | boolean | undefined>) => 
   return queryString ? `?${queryString}` : ''
 }
 
+const stringifyDetails = (details: Record<string, unknown> | null | undefined) => {
+  if (!details || Object.keys(details).length === 0) return null
+
+  try {
+    return JSON.stringify(details)
+  } catch {
+    return String(details)
+  }
+}
+
 export const errorMessage = (error: unknown) => {
-  if (error instanceof ApiError) return error.payload.message
+  if (error instanceof ApiError) {
+    const parts = [`HTTP ${error.status}`, `code: ${error.payload.code}`]
+    if (error.payload.message) parts.push(`message: ${error.payload.message}`)
+
+    const details = stringifyDetails(error.payload.details)
+    if (details) parts.push(`details: ${details}`)
+    if (error.payload.request_id) parts.push(`request id: ${error.payload.request_id}`)
+
+    return parts.join(' | ')
+  }
+
   if (error instanceof Error) return error.message
   return 'Unexpected error'
 }

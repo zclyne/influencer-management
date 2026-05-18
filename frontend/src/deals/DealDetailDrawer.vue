@@ -90,7 +90,7 @@ const statusColor = (status: DealStatus) => {
         </a-descriptions-item>
       </a-descriptions>
 
-      <a-card v-if="deal.internal_notes" size="small" title="Internal notes">
+      <a-card v-if="deal.internal_notes" size="small" title="Internal Notes">
         <p class="notes">{{ deal.internal_notes }}</p>
       </a-card>
 

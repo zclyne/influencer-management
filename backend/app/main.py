@@ -4,8 +4,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.errors import validation_exception_handler
+from app.api.errors import (
+    http_exception_handler,
+    unhandled_exception_handler,
+    validation_exception_handler,
+)
 from app.api.routes import (
     brands,
     campaign_exports,
@@ -47,6 +52,8 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    app.add_exception_handler(Exception, unhandled_exception_handler)
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(influencers.router, prefix="/api/v1")
     app.include_router(influencer_ingestion.router, prefix="/api/v1")

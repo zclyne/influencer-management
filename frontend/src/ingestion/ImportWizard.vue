@@ -13,6 +13,7 @@ import type {
   ImportSourceType,
 } from '../api/types'
 import { platformColor, platformOptions } from '../influencers/useInfluencers'
+import EmptyState from '../shared/EmptyState.vue'
 
 const props = defineProps<{
   campaigns: CampaignResponse[]
@@ -334,7 +335,7 @@ const runConfirm = async () => {
 
     <a-alert v-if="error" class="page-alert" type="error" :message="error" show-icon />
 
-    <a-card class="setup-card" title="Upload and setup">
+    <a-card class="setup-card" title="Upload and Setup">
       <div class="setup-grid">
         <div class="upload-panel">
           <a-upload-dragger
@@ -385,7 +386,7 @@ const runConfirm = async () => {
     <a-card v-if="preview" class="review-card" :body-style="{ padding: '0' }">
       <template #title>
         <div class="card-title-block">
-          <span>Review rows</span>
+          <span>Review Rows</span>
           <small>
             {{
               selectedCampaignName
@@ -436,6 +437,12 @@ const runConfirm = async () => {
         :row-key="(record: IngestionPreviewRow) => record.row.source_row_number"
         :scroll="{ x: 1460 }"
       >
+        <template #emptyText>
+          <EmptyState
+            title="No preview rows"
+            description="The uploaded file did not contain any importable Modash rows."
+          />
+        </template>
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'row'">
             {{ csvRowNumber(record.row) }}
@@ -524,6 +531,12 @@ const runConfirm = async () => {
           :pagination="{ pageSize: 8, size: 'small' }"
           :row-key="(record: IngestionRowResult) => record.source_row_number"
         >
+          <template #emptyText>
+            <EmptyState
+              title="No import results"
+              description="No rows were written or skipped for this import confirmation."
+            />
+          </template>
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'row'">
               {{ csvRowNumber(record) }}

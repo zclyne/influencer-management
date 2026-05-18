@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
-import { Pencil, Plus, Trash2 } from '@lucide/vue'
+import { Mail, Paperclip, Pencil, Plus, Trash2, User } from '@lucide/vue'
 import type {
   CompensationItemResponse,
   CompensationItemStatus,
@@ -14,6 +14,7 @@ import type {
 } from '../api/types'
 import { dealStatuses, dealStatusLabels } from '../campaigns/useCampaignWorkspace'
 import { platformColor } from '../influencers/useInfluencers'
+import EmptyState from '../shared/EmptyState.vue'
 import { normalizeTags } from '../shared/tags'
 import { useDealDetail } from './useDealDetail'
 
@@ -276,6 +277,15 @@ const nextActionLabel = computed(() => {
   return 'Review deal'
 })
 
+const deliverableSummary = computed(() => deal.value?.deliverables.label ?? 'No deliverables')
+
+const compensationSummary = computed(() => deal.value?.compensation.label ?? 'No cost items')
+
+const nextDueLabel = computed(() => {
+  const dueDate = deal.value?.deliverables.next_due_date
+  return dueDate ? formatDate(dueDate) : 'Not set'
+})
+
 const lostReasonInputEnabled = computed(
   () => deal.value?.status === 'LOST' || dealForm.status === 'LOST',
 )
@@ -504,26 +514,33 @@ void loadDealDetail()
 
     <a-spin :spinning="loading">
       <template v-if="deal">
-        <div class="page-heading">
-          <div>
-            <h1>{{ deal.influencer.display_name }} deal</h1>
-            <div class="heading-meta">
-              <a-tag :color="statusColor(deal.status)">{{ statusLabel(deal.status) }}</a-tag>
-              <a-tag v-if="deal.archived_at" color="red">Deleted</a-tag>
-              <span>{{ campaignName }} · next action: {{ nextActionLabel }}</span>
+        <section class="deal-hero">
+          <div class="hero-main">
+            <div class="hero-title-row">
+              <h1>{{ deal.influencer.display_name }} deal</h1>
+              <div class="heading-meta">
+                <a-tag :color="statusColor(deal.status)">{{ statusLabel(deal.status) }}</a-tag>
+                <a-tag v-if="deal.archived_at" color="red">Deleted</a-tag>
+              </div>
+            </div>
+            <p class="hero-brief">{{ nextActionLabel }}</p>
+            <div class="hero-meta">
+              <strong>{{ campaignName }}</strong>
+              <span>{{ deal.primary_contact?.email ?? 'No contact' }}</span>
+              <span>Updated {{ formatDate(deal.updated_at) }}</span>
             </div>
           </div>
           <div class="page-actions">
-            <RouterLink :to="{ name: 'influencerDetail', params: { influencerId: deal.influencer.id } }">
-              <a-button>Open influencer</a-button>
-            </RouterLink>
-            <RouterLink :to="{ name: 'email', query: { campaignId, dealId } }">
-              <a-button>Open email</a-button>
-            </RouterLink>
-            <a-button type="primary" @click="openDealEdit">
+            <a-button class="action-button-edit" @click="openDealEdit">
               <Pencil class="button-leading-icon" aria-hidden="true" />
               Edit deal
             </a-button>
+            <RouterLink :to="{ name: 'email', query: { campaignId, dealId } }">
+              <a-button>
+                <Mail class="button-leading-icon" aria-hidden="true" />
+                Open email
+              </a-button>
+            </RouterLink>
             <a-button
               danger
               :disabled="Boolean(deal.archived_at)"
@@ -531,92 +548,37 @@ void loadDealDetail()
               @click="confirmArchive"
             >
               <Trash2 class="button-leading-icon" aria-hidden="true" />
-              Delete deal
+              Delete
             </a-button>
           </div>
-        </div>
+        </section>
 
-        <div class="top-grid">
-          <a-card>
-            <template #title>Influencer</template>
-            <div class="influencer-card">
-              <h2>{{ deal.influencer.display_name }}</h2>
-              <p>{{ locationLabel }}</p>
-              <div v-if="deal.platforms.length" class="tag-row">
-                <a-tag
-                  v-for="platform in deal.platforms"
-                  :key="`${platform.platform}:${platform.username}`"
-                  :color="platformColor(platform.platform)"
-                >
-                  {{ platformLabel(platform) }}
-                </a-tag>
+        <div class="deal-workspace-layout">
+          <main class="deal-main">
+            <section class="metrics-strip" aria-label="Deal metrics">
+              <div class="metric-item">
+                <span>Deliverables</span>
+                <strong>{{ deliverableSummary }}</strong>
               </div>
-              <span v-else class="muted">No platforms</span>
-              <div class="card-footer">
-                <span>
-                  Primary contact:
-                  <strong>{{ deal.primary_contact?.email ?? 'No contact' }}</strong>
-                </span>
+              <div class="metric-item">
+                <span>Compensation</span>
+                <strong>{{ compensationSummary }}</strong>
               </div>
-            </div>
-          </a-card>
+              <div class="metric-item">
+                <span>Next due</span>
+                <strong>{{ nextDueLabel }}</strong>
+              </div>
+              <div class="metric-item">
+                <span>Completion</span>
+                <strong>{{ deal.completion_suggested ? 'Review' : 'Open' }}</strong>
+              </div>
+            </section>
 
-          <a-card>
-            <template #title>Deal summary</template>
-            <a-descriptions size="small" :column="1">
-              <a-descriptions-item v-if="deal.status === 'LOST'" label="Status">
-                <div class="status-summary">
-                  <a-tag :color="statusColor(deal.status)">{{ statusLabel(deal.status) }}</a-tag>
-                  <span class="status-reason">{{ deal.lost_reason || 'Reason not recorded' }}</span>
-                </div>
-              </a-descriptions-item>
-              <a-descriptions-item label="Campaign">
-                {{ campaignName }}
-              </a-descriptions-item>
-              <a-descriptions-item label="Next action">
-                {{ nextActionLabel }}
-              </a-descriptions-item>
-              <a-descriptions-item label="Created">
-                {{ formatDate(deal.created_at) }}
-              </a-descriptions-item>
-              <a-descriptions-item label="Updated">
-                {{ formatDate(deal.updated_at) }}
-              </a-descriptions-item>
-            </a-descriptions>
-          </a-card>
-
-          <a-card>
-            <template #title>Contact</template>
-            <a-descriptions size="small" :column="1">
-              <a-descriptions-item label="Primary">
-                {{ deal.primary_contact?.email ?? 'No contact' }}
-              </a-descriptions-item>
-              <a-descriptions-item label="Role">
-                {{ deal.primary_contact?.role ?? 'Not set' }}
-              </a-descriptions-item>
-            </a-descriptions>
-          </a-card>
-        </div>
-
-        <div class="detail-grid">
-          <a-card class="section-card">
-            <template #title>Tags</template>
-            <template #extra>
-              <a-button @click="openTagsEdit">
-                <Pencil class="button-leading-icon" aria-hidden="true" />
-                Edit
-              </a-button>
-            </template>
-            <div v-if="deal.labels.length" class="tag-row">
-              <a-tag v-for="tag in deal.labels" :key="tag">{{ tag }}</a-tag>
-            </div>
-            <span v-else class="muted">No tags</span>
-          </a-card>
-
+        <div class="work-grid">
           <a-card class="section-card">
             <template #title>Deliverables</template>
             <template #extra>
-              <a-button @click="openCreateDeliverable">
+              <a-button class="action-button-add" @click="openCreateDeliverable">
                 <Plus class="button-leading-icon" aria-hidden="true" />
                 Add item
               </a-button>
@@ -629,6 +591,19 @@ void loadDealDetail()
               :scroll="{ x: 820 }"
               size="small"
             >
+              <template #emptyText>
+                <EmptyState
+                  title="No deliverables yet"
+                  description="Add deliverables to track what this creator owes for the campaign."
+                >
+                  <template #actions>
+                    <a-button class="action-button-add" @click="openCreateDeliverable">
+                      <Plus class="button-leading-icon" aria-hidden="true" />
+                      Add item
+                    </a-button>
+                  </template>
+                </EmptyState>
+              </template>
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'item'">
                   <strong>{{ record.quantity }} {{ record.type }}</strong>
@@ -682,7 +657,7 @@ void loadDealDetail()
           <a-card class="section-card">
             <template #title>Compensation</template>
             <template #extra>
-              <a-button @click="openCreateCompensation">
+              <a-button class="action-button-add" @click="openCreateCompensation">
                 <Plus class="button-leading-icon" aria-hidden="true" />
                 Add item
               </a-button>
@@ -695,6 +670,19 @@ void loadDealDetail()
               :scroll="{ x: 820 }"
               size="small"
             >
+              <template #emptyText>
+                <EmptyState
+                  title="No compensation items yet"
+                  description="Add cash, gifts, samples, reimbursements, or other costs for this deal."
+                >
+                  <template #actions>
+                    <a-button class="action-button-add" @click="openCreateCompensation">
+                      <Plus class="button-leading-icon" aria-hidden="true" />
+                      Add item
+                    </a-button>
+                  </template>
+                </EmptyState>
+              </template>
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'type'">
                   <strong>{{ compensationTypeLabel(record.type) }}</strong>
@@ -741,25 +729,96 @@ void loadDealDetail()
               </template>
             </a-table>
           </a-card>
+        </div>
+          </main>
 
-          <a-card class="section-card">
-            <template #title>Files and notes</template>
-            <p class="section-copy">
-              Local attachments, briefs, receipts, and campaign-specific internal notes.
-            </p>
-            <a-card size="small">
+          <aside class="deal-sidebar">
+            <a-card class="side-card influencer-card">
+              <template #title>Influencer</template>
+              <template #extra>
+                <RouterLink :to="{ name: 'influencerDetail', params: { influencerId: deal.influencer.id } }">
+                  <a-button>
+                    <User class="button-leading-icon" aria-hidden="true" />
+                    Open
+                  </a-button>
+                </RouterLink>
+              </template>
+              <h2>{{ deal.influencer.display_name }}</h2>
+              <p>{{ locationLabel }}</p>
+              <div v-if="deal.platforms.length" class="tag-row">
+                <a-tag
+                  v-for="platform in deal.platforms"
+                  :key="`${platform.platform}:${platform.username}`"
+                  :color="platformColor(platform.platform)"
+                >
+                  {{ platformLabel(platform) }}
+                </a-tag>
+              </div>
+              <span v-else class="muted">No platforms</span>
+            </a-card>
+
+            <a-card class="side-card">
+              <template #title>Deal Summary</template>
+              <div class="property-list">
+                <div v-if="deal.status === 'LOST'">
+                  <span>Lost reason</span>
+                  <strong>{{ deal.lost_reason || 'Reason not recorded' }}</strong>
+                </div>
+                <div>
+                  <span>Campaign</span>
+                  <strong>{{ campaignName }}</strong>
+                </div>
+                <div>
+                  <span>Created</span>
+                  <strong>{{ formatDate(deal.created_at) }}</strong>
+                </div>
+                <div>
+                  <span>Updated</span>
+                  <strong>{{ formatDate(deal.updated_at) }}</strong>
+                </div>
+              </div>
+            </a-card>
+
+            <a-card class="side-card">
+              <template #title>Tags</template>
+              <template #extra>
+                <a-button class="action-button-edit" @click="openTagsEdit">
+                  <Pencil class="button-leading-icon" aria-hidden="true" />
+                  Edit
+                </a-button>
+              </template>
+              <div v-if="deal.labels.length" class="tag-row">
+                <a-tag v-for="tag in deal.labels" :key="tag">{{ tag }}</a-tag>
+              </div>
+              <span v-else class="muted">No tags yet.</span>
+            </a-card>
+
+            <a-card class="side-card">
+              <template #title>Notes</template>
+              <template #extra>
+                <a-button class="action-button-edit" @click="openDealEdit">
+                  <Pencil class="button-leading-icon" aria-hidden="true" />
+                  Edit
+                </a-button>
+              </template>
               <p class="notes">{{ deal.internal_notes || 'No internal notes yet.' }}</p>
             </a-card>
-            <div class="section-actions">
-              <a-button @click="openDealEdit">
-                <Pencil class="button-leading-icon" aria-hidden="true" />
-                Edit notes
+
+            <a-card class="side-card attachments-card">
+              <template #title>Attachments</template>
+              <div class="attachments-placeholder">
+                <Paperclip class="attachments-icon" aria-hidden="true" />
+                <div>
+                  <strong>No attachments yet</strong>
+                  <span>Deal-scoped attachments are not available yet.</span>
+                </div>
+              </div>
+              <a-button disabled block>
+                <Plus class="button-leading-icon" aria-hidden="true" />
+                Attach
               </a-button>
-              <a-tooltip title="Deal-scoped file attachment API is not implemented yet.">
-                <a-button disabled>Attach file</a-button>
-              </a-tooltip>
-            </div>
-          </a-card>
+            </a-card>
+          </aside>
         </div>
       </template>
 
@@ -926,21 +985,16 @@ void loadDealDetail()
   border-radius: 8px;
 }
 
-.page-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
 h1,
 h2 {
   margin: 0;
   color: #20262d;
+  font-weight: 600;
 }
 
 h1 {
   font-size: 30px;
+  line-height: 1.15;
 }
 
 .button-leading-icon {
@@ -971,71 +1025,123 @@ h2 {
 .heading-meta,
 .page-actions,
 .tag-row,
-.card-footer,
-.section-actions {
+.card-footer {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
 
+.page-actions {
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
 .heading-meta {
-  margin-top: 10px;
   color: #58636f;
 }
 
-.page-actions {
-  justify-content: flex-end;
+.deal-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 24px;
+  border: 1px solid #dde6ef;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgb(25 45 70 / 6%);
 }
 
-.top-grid {
-  display: grid;
-  grid-template-columns: minmax(280px, 1.05fr) minmax(260px, 1fr) minmax(260px, 1fr);
-  gap: 18px;
-}
-
-.influencer-card {
+.hero-main {
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
-.status-summary {
+.hero-title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
-.status-summary :deep(.ant-tag) {
-  margin-inline-end: 0;
+.hero-brief {
+  max-width: 820px;
+  margin: 0;
+  color: #2f3a45;
+  font-size: 16px;
+  line-height: 1.55;
 }
 
-.status-reason {
-  color: #58636f;
-}
-
-.influencer-card p,
-.section-copy,
-.cell-note,
-.notes,
-.muted {
+.hero-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   color: #697582;
 }
 
-.influencer-card p,
-.section-copy,
-.notes,
-.cell-note {
-  margin: 0;
-  line-height: 1.5;
+.hero-meta strong {
+  color: #34424f;
+  font-weight: 500;
 }
 
-.card-footer {
-  justify-content: space-between;
-  margin-top: 8px;
+.hero-meta span::before {
+  content: "·";
+  margin-right: 8px;
+  color: #9aa6b2;
 }
 
-.detail-grid {
+.deal-workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+  gap: 18px;
+}
+
+.deal-main,
+.deal-sidebar {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.metrics-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #e2e8f0;
+}
+
+.metric-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: #ffffff;
+}
+
+.metric-item span {
+  color: #697582;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.metric-item strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #20262d;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.work-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 18px;
@@ -1056,8 +1162,113 @@ h2 {
   min-width: 0;
 }
 
-.section-actions {
-  margin-top: 14px;
+.side-card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.side-card :deep(.ant-card-head) {
+  min-height: 42px;
+}
+
+.side-card :deep(.ant-card-head-title) {
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.section-card :deep(.ant-card-head-title) {
+  font-weight: 600;
+}
+
+.side-card :deep(.ant-card-body) {
+  min-width: 0;
+}
+
+.influencer-card {
+  display: grid;
+  gap: 10px;
+}
+
+.influencer-card p,
+.cell-note,
+.notes,
+.muted {
+  color: #697582;
+}
+
+.influencer-card p,
+.notes,
+.cell-note {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.property-list {
+  display: grid;
+  gap: 12px;
+}
+
+.property-list div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.property-list span {
+  color: #697582;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.property-list strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #20262d;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.section-card strong {
+  font-weight: 500;
+}
+
+.notes {
+  white-space: pre-wrap;
+}
+
+.attachments-card :deep(.ant-card-body) {
+  display: grid;
+  gap: 12px;
+}
+
+.attachments-placeholder {
+  display: flex;
+  gap: 10px;
+  color: #697582;
+}
+
+.attachments-placeholder div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.attachments-placeholder strong {
+  color: #34424f;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.attachments-placeholder span {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.attachments-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
 }
 
 .cell-note {
@@ -1083,19 +1294,43 @@ h2 {
 }
 
 @media (max-width: 1100px) {
-  .top-grid,
-  .detail-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 720px) {
-  .page-heading {
+  .deal-hero,
+  .deal-workspace-layout,
+  .work-grid {
     display: grid;
+    grid-template-columns: 1fr;
   }
 
   .page-actions {
     justify-content: flex-start;
+  }
+
+  .metrics-strip {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
+  .hero-meta span::before {
+    content: none;
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .deal-hero {
+    padding: 18px;
+  }
+
+  .metrics-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .page-actions {
+    display: grid;
+  }
+
+  .page-actions a,
+  .page-actions button {
+    width: 100%;
   }
 
   .form-grid {

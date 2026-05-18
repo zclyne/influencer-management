@@ -125,7 +125,7 @@ def test_seeded_deal_graph_and_export_api_smoke(
     export_response = api_client.get(f"/api/v1/campaigns/{PRIMARY_CAMPAIGN_ID}/export.csv")
     assert export_response.status_code == 200
     assert "Maya Chen" in export_response.text
-    assert "Northstar Beauty" in export_response.text
+    assert "Northstar Beauty" not in export_response.text
 
 
 def test_seed_runner_command_applies_sql_to_file_database(tmp_path: Path) -> None:

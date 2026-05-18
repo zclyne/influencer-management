@@ -11,8 +11,10 @@ import {
   Pencil,
   RefreshCw,
   Trash2,
+  Unplug,
 } from '@lucide/vue'
 import {
+  ApiError,
   batchEmailThreads,
   disconnectEmail,
   errorMessage,
@@ -37,6 +39,7 @@ import type {
   GmailThreadDetailResponse,
   GmailThreadSummary,
 } from '../api/types'
+import EmptyState from '../shared/EmptyState.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -86,8 +89,19 @@ const linkDealId = ref<string | undefined>()
 const linkDeals = ref<DealPipelineRow[]>([])
 const error = ref<string | null>(null)
 
-const connected = computed(() => authStatus.value?.connected === true)
+const reconnectRequired = computed(() => authStatus.value?.reconnect_required === true)
+const connected = computed(() => authStatus.value?.connected === true && !reconnectRequired.value)
 const pageSize = 20
+const authPanelTitle = computed(() => (reconnectRequired.value ? 'Reconnect Gmail' : 'Sign in to Gmail'))
+const authPanelCopy = computed(() =>
+  reconnectRequired.value
+    ? 'Your Google session expired or failed. Sign in with Google again to keep loading Gmail threads.'
+    : 'Use your Google account to load Gmail threads and apply CreatorFlow campaign labels.',
+)
+const authButtonLabel = computed(() => {
+  if (authLoading.value) return 'Opening Google…'
+  return 'Sign in with Google'
+})
 
 const campaignOptions = computed(() =>
   campaigns.value.map((campaign) => ({ label: campaign.name, value: campaign.id })),
@@ -145,11 +159,47 @@ const allVisibleSelected = computed(
   () => threads.value.length > 0 && selectedVisibleCount.value === threads.value.length,
 )
 const hasSelectedThreads = computed(() => selectedThreadIds.value.length > 0)
+const hasThreadFilters = computed(() =>
+  Boolean(
+    query.value.trim() ||
+      selectedCampaignId.value ||
+      selectedDealId.value ||
+      selectedLabel.value ||
+      selectedMailView.value !== 'primary',
+  ),
+)
 const maxMessageFrameHeight = 520
 const minMessageFrameHeight = 72
 
 const loadAuthStatus = async () => {
   authStatus.value = await getEmailAuthStatus()
+}
+
+const enterReconnectState = (messageText: string) => {
+  authStatus.value = {
+    connected: true,
+    email: authStatus.value?.email,
+    google_subject: authStatus.value?.google_subject,
+    scopes: authStatus.value?.scopes ?? [],
+    expires_at: authStatus.value?.expires_at,
+    reconnect_required: true,
+  }
+  threads.value = []
+  labels.value = []
+  selectedThread.value = null
+  selectedThreadIds.value = []
+  nextPageToken.value = null
+  resultSizeEstimate.value = null
+  error.value = messageText
+}
+
+const handleEmailError = (caughtError: unknown) => {
+  const messageText = errorMessage(caughtError)
+  if (caughtError instanceof ApiError && caughtError.payload.code === 'email_reconnect_required') {
+    enterReconnectState(messageText)
+    return true
+  }
+  return false
 }
 
 const connectGmail = async () => {
@@ -254,7 +304,9 @@ const loadThreads = async ({
     }
     syncQueryToRoute()
   } catch (loadError) {
-    error.value = errorMessage(loadError)
+    if (!handleEmailError(loadError)) {
+      error.value = errorMessage(loadError)
+    }
   } finally {
     loading.value = false
   }
@@ -321,7 +373,9 @@ const applyBatchAction = async (action: EmailThreadBatchAction) => {
     }
     message.success(labelByAction[action])
   } catch (batchError) {
-    message.error(errorMessage(batchError))
+    if (!handleEmailError(batchError)) {
+      message.error(errorMessage(batchError))
+    }
   } finally {
     batchLoading.value = false
   }
@@ -345,7 +399,9 @@ const openThread = async (
     )
     syncQueryToRoute()
   } catch (threadError) {
-    message.error(errorMessage(threadError))
+    if (!handleEmailError(threadError)) {
+      message.error(errorMessage(threadError))
+    }
   } finally {
     detailLoading.value = false
   }
@@ -411,7 +467,9 @@ const saveThreadLinks = async () => {
     linkModalOpen.value = false
     message.success('Thread linked.')
   } catch (linkError) {
-    message.error(errorMessage(linkError))
+    if (!handleEmailError(linkError)) {
+      message.error(errorMessage(linkError))
+    }
   } finally {
     linkSaving.value = false
   }
@@ -427,7 +485,9 @@ const clearThreadLinks = async () => {
     linkModalOpen.value = false
     message.success('Thread links cleared.')
   } catch (linkError) {
-    message.error(errorMessage(linkError))
+    if (!handleEmailError(linkError)) {
+      message.error(errorMessage(linkError))
+    }
   } finally {
     linkSaving.value = false
   }
@@ -637,6 +697,10 @@ onMounted(async () => {
   try {
     await Promise.all([loadAuthStatus(), loadCampaigns()])
     await loadDeals()
+    if (reconnectRequired.value) {
+      error.value = 'Gmail authorization expired or failed. Sign in with Google again.'
+      return
+    }
     if (connected.value) {
       await loadLabels()
       const threadId = route.query.threadId as string | undefined
@@ -656,16 +720,31 @@ onMounted(async () => {
         <h1>Emails</h1>
         <p>Gmail threads with campaign and deal labels.</p>
       </div>
-      <a-space>
-        <a-tag v-if="connected" color="green">{{ authStatus?.email }}</a-tag>
-        <a-button v-if="connected" :loading="authLoading" @click="disconnect">Disconnect</a-button>
-      </a-space>
+      <div class="account-actions">
+        <a-tag v-if="connected" class="account-pill" color="green">{{ authStatus?.email }}</a-tag>
+        <a-tag v-else-if="reconnectRequired" class="account-pill" color="orange">
+          {{ authStatus?.email }}
+        </a-tag>
+        <a-button
+          v-if="authStatus?.connected"
+          class="secondary-action"
+          :loading="authLoading"
+          @click="disconnect"
+        >
+          <Unplug class="button-leading-icon" aria-hidden="true" />
+          Disconnect
+        </a-button>
+      </div>
     </div>
 
-    <section v-if="!connected" class="google-auth-panel">
-      <div>
-        <h2>Sign in to Gmail</h2>
-        <p>Use your Google account to load Gmail threads and apply CreatorFlow campaign labels.</p>
+    <section
+      v-if="!connected"
+      class="google-auth-panel"
+      :class="{ reconnect: reconnectRequired }"
+    >
+      <div class="auth-copy">
+        <h2>{{ authPanelTitle }}</h2>
+        <p>{{ authPanelCopy }}</p>
       </div>
       <button
         class="google-login-button"
@@ -693,50 +772,96 @@ onMounted(async () => {
             />
           </svg>
         </span>
-        <span>{{ authLoading ? 'Opening Google...' : 'Sign in with Google' }}</span>
+        <span>{{ authButtonLabel }}</span>
       </button>
     </section>
 
-    <a-alert v-if="error" class="page-alert" type="error" show-icon :message="error" />
+    <a-alert
+      v-if="error && !reconnectRequired"
+      class="page-alert"
+      type="error"
+      show-icon
+      :message="error"
+    />
 
     <template v-if="connected">
-      <a-segmented
-        v-model:value="selectedMailView"
-        class="mail-view-tabs"
-        :options="mailViews"
-      />
+      <div class="mail-toolbar">
+        <div class="toolbar-row toolbar-row-primary">
+          <a-segmented
+            v-model:value="selectedMailView"
+            class="mail-view-tabs"
+            :options="mailViews"
+          />
+          <div class="toolbar-actions" aria-label="Mailbox navigation">
+            <span class="thread-range">{{ threadRangeLabel }}</span>
+            <a-button
+              class="icon-button"
+              size="small"
+              type="text"
+              title="Previous page"
+              aria-label="Previous page"
+              :disabled="!hasPreviousPage || loading"
+              @click="loadPreviousPage"
+            >
+              <ChevronLeft aria-hidden="true" />
+            </a-button>
+            <a-button
+              class="icon-button"
+              size="small"
+              type="text"
+              title="Next page"
+              aria-label="Next page"
+              :disabled="!hasNextPage || loading"
+              @click="loadNextPage"
+            >
+              <ChevronRight aria-hidden="true" />
+            </a-button>
+            <a-button
+              class="icon-button"
+              size="small"
+              type="text"
+              title="Refresh"
+              aria-label="Refresh"
+              :disabled="loading"
+              @click="refreshCurrentPage"
+            >
+              <RefreshCw aria-hidden="true" />
+            </a-button>
+          </div>
+        </div>
 
-      <div class="filters">
-        <a-input-search
-          v-model:value="query"
-          class="query-input"
-          placeholder="Search Gmail"
-          enter-button="Search"
-          @search="resetThreadPagination"
-        />
-        <a-select
-          v-model:value="selectedCampaignId"
-          class="filter-select"
-          allow-clear
-          placeholder="Campaign"
-          :options="campaignOptions"
-        />
-        <a-select
-          v-model:value="selectedDealId"
-          class="filter-select"
-          allow-clear
-          placeholder="Deal"
-          :disabled="!selectedCampaignId"
-          :options="dealOptions"
-        />
-        <a-select
-          v-model:value="selectedLabel"
-          class="filter-select"
-          allow-clear
-          show-search
-          placeholder="Gmail label"
-          :options="labelOptions"
-        />
+        <div class="toolbar-row toolbar-row-filters">
+          <a-input-search
+            v-model:value="query"
+            class="query-input"
+            placeholder="Search Gmail"
+            enter-button="Search"
+            @search="resetThreadPagination"
+          />
+          <a-select
+            v-model:value="selectedCampaignId"
+            class="filter-select"
+            allow-clear
+            placeholder="Campaign"
+            :options="campaignOptions"
+          />
+          <a-select
+            v-model:value="selectedDealId"
+            class="filter-select"
+            allow-clear
+            placeholder="Deal"
+            :disabled="!selectedCampaignId"
+            :options="dealOptions"
+          />
+          <a-select
+            v-model:value="selectedLabel"
+            class="filter-select"
+            allow-clear
+            show-search
+            placeholder="Gmail label"
+            :options="labelOptions"
+          />
+        </div>
       </div>
 
       <div class="email-workspace">
@@ -745,41 +870,6 @@ onMounted(async () => {
             <div class="thread-list-title">
               <strong>Threads</strong>
               <span>{{ threadRangeLabel }}</span>
-            </div>
-            <div class="thread-list-nav" aria-label="Thread list navigation">
-              <a-button
-                class="icon-button"
-                size="small"
-                type="text"
-                title="Previous page"
-                aria-label="Previous page"
-                :disabled="!hasPreviousPage || loading"
-                @click="loadPreviousPage"
-              >
-                <ChevronLeft aria-hidden="true" />
-              </a-button>
-              <a-button
-                class="icon-button"
-                size="small"
-                type="text"
-                title="Next page"
-                aria-label="Next page"
-                :disabled="!hasNextPage || loading"
-                @click="loadNextPage"
-              >
-                <ChevronRight aria-hidden="true" />
-              </a-button>
-              <a-button
-                class="icon-button"
-                size="small"
-                type="text"
-                title="Refresh"
-                aria-label="Refresh"
-                :disabled="loading"
-                @click="refreshCurrentPage"
-              >
-                <RefreshCw aria-hidden="true" />
-              </a-button>
             </div>
           </div>
           <div class="batch-toolbar">
@@ -831,11 +921,28 @@ onMounted(async () => {
           </div>
           <div class="thread-list-scroll">
             <a-list :loading="loading" :data-source="threads" item-layout="vertical">
+              <template #emptyText>
+                <EmptyState
+                  v-if="hasThreadFilters"
+                  title="No Gmail threads match"
+                  description="Clear the search, CRM filters, label, or mailbox view to broaden the thread list."
+                />
+                <EmptyState
+                  v-else
+                  title="No Gmail threads"
+                  description="Refresh Gmail or choose another mailbox view if messages should be available."
+                />
+              </template>
               <template #renderItem="{ item }">
                 <a-list-item
                   class="thread-row"
                   :class="{ active: item.id === selectedThreadId, unread: item.unread }"
+                  role="button"
+                  tabindex="0"
+                  :aria-current="item.id === selectedThreadId ? 'true' : undefined"
                   @click="openThread(item.id)"
+                  @keydown.enter="openThread(item.id)"
+                  @keydown.space.prevent="openThread(item.id)"
                 >
                   <a-checkbox
                     class="thread-select"
@@ -1004,7 +1111,8 @@ onMounted(async () => {
 <style scoped>
 .email-page {
   display: grid;
-  gap: 18px;
+  gap: 16px;
+  color: #20262d;
 }
 
 .page-header {
@@ -1014,10 +1122,16 @@ onMounted(async () => {
   gap: 16px;
 }
 
+.page-header > div:first-child {
+  min-width: 0;
+}
+
 .page-header h1,
 .thread-detail-header h2 {
   margin: 0;
   color: #20262d;
+  line-height: 1.15;
+  text-wrap: balance;
 }
 
 .page-header p,
@@ -1028,6 +1142,28 @@ onMounted(async () => {
   color: #697582;
 }
 
+.account-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.account-pill {
+  max-width: 320px;
+  margin-inline-end: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.secondary-action {
+  border-color: #d7dee7;
+  color: #3c4652;
+}
+
 .google-login-button {
   display: inline-flex;
   align-items: center;
@@ -1036,15 +1172,16 @@ onMounted(async () => {
   min-width: 220px;
   height: 44px;
   padding: 0 18px;
-  border: 1px solid #dadce0;
-  border-radius: 4px;
+  border: 1px solid #d7dee7;
+  border-radius: 8px;
   background: #ffffff;
-  color: #3c4043;
-  box-shadow: 0 1px 2px rgb(60 64 67 / 0.12);
+  color: #263238;
+  box-shadow: 0 1px 2px rgb(32 38 45 / 0.08);
   cursor: pointer;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
+  touch-action: manipulation;
   transition:
     background-color 0.16s ease,
     border-color 0.16s ease,
@@ -1052,15 +1189,15 @@ onMounted(async () => {
 }
 
 .google-login-button:hover:not(:disabled) {
-  border-color: #d2e3fc;
-  background: #f8fbff;
+  border-color: #b9c6d3;
+  background: #f8fafc;
   box-shadow:
-    0 1px 2px rgb(60 64 67 / 0.18),
-    0 1px 3px 1px rgb(60 64 67 / 0.08);
+    0 1px 2px rgb(32 38 45 / 0.12),
+    0 4px 12px rgb(32 38 45 / 0.08);
 }
 
 .google-login-button:focus-visible {
-  outline: 2px solid #1a73e8;
+  outline: 2px solid #216b55;
   outline-offset: 2px;
 }
 
@@ -1087,12 +1224,24 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  padding: 18px;
+  gap: 24px;
+  padding: 20px;
   border: 1px solid #e0e5eb;
   border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 1px 2px rgb(32 38 45 / 0.04);
+  box-shadow: 0 1px 2px rgb(32 38 45 / 0.05);
+}
+
+.google-auth-panel.reconnect {
+  border-color: #f1d4a5;
+  background: #fffaf2;
+}
+
+.auth-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  max-width: 720px;
 }
 
 .google-auth-panel h2 {
@@ -1103,7 +1252,7 @@ onMounted(async () => {
 }
 
 .google-auth-panel p {
-  margin: 4px 0 0;
+  margin: 0;
   color: #697582;
 }
 
@@ -1111,43 +1260,99 @@ onMounted(async () => {
   margin-top: -4px;
 }
 
-.filters {
+.mail-toolbar {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #dfe6ee;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(32 38 45 / 0.04);
+}
+
+.toolbar-row {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
+  min-width: 0;
+}
+
+.toolbar-row-primary {
+  justify-content: space-between;
+}
+
+.toolbar-row-filters {
+  flex-wrap: wrap;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.thread-range {
+  color: #697582;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .mail-view-tabs {
+  min-width: 0;
   width: fit-content;
   max-width: 100%;
   overflow-x: auto;
 }
 
+.mail-view-tabs :deep(.ant-segmented-group) {
+  align-items: center;
+}
+
 .query-input {
-  width: min(420px, 100%);
+  width: min(460px, 100%);
+  min-width: 260px;
+  flex: 1 1 360px;
 }
 
 .filter-select {
-  width: 220px;
+  width: 210px;
+  min-width: 180px;
 }
 
 .email-workspace {
   display: grid;
   grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
-  gap: 16px;
+  gap: 14px;
   align-items: start;
-  min-height: 660px;
+  min-height: 520px;
 }
 
 .thread-list-card,
 .thread-detail-card {
   min-width: 0;
   overflow: hidden;
+  border-color: #dfe6ee;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgb(32 38 45 / 0.04);
 }
 
 .thread-list-card {
-  height: calc(100vh - 210px);
+  height: calc(100vh - 340px);
   min-height: 520px;
+}
+
+.thread-list-card :deep(.ant-card-body) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.thread-detail-card :deep(.ant-card-body) {
+  padding: 18px;
 }
 
 .thread-detail-header,
@@ -1161,16 +1366,22 @@ onMounted(async () => {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
   flex-shrink: 0;
 }
 
+.header-actions :deep(.ant-btn),
+.thread-link-bar :deep(.ant-btn) {
+  display: inline-flex;
+  align-items: center;
+}
+
 .thread-detail-heading {
   display: grid;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .thread-link-bar {
@@ -1181,9 +1392,9 @@ onMounted(async () => {
   flex-wrap: wrap;
   min-width: 0;
   padding: 10px 12px;
-  border: 1px solid #dfe4ea;
+  border: 1px solid #dbe6df;
   border-radius: 8px;
-  background: #f7f9fb;
+  background: #f5faf7;
 }
 
 .thread-link-status {
@@ -1205,19 +1416,22 @@ onMounted(async () => {
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .thread-link-tags :deep(.ant-tag) {
+  max-width: 280px;
   margin-inline-end: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .thread-list-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
+  display: block;
   padding: 14px 16px;
   border-bottom: 1px solid #edf0f3;
+  background: #fbfcfd;
 }
 
 .thread-list-title {
@@ -1229,14 +1443,6 @@ onMounted(async () => {
 .thread-list-title span {
   color: #697582;
   font-size: 12px;
-}
-
-.thread-list-nav {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  justify-self: end;
-  white-space: nowrap;
 }
 
 .button-leading-icon {
@@ -1252,7 +1458,7 @@ onMounted(async () => {
 }
 
 .icon-button {
-  width: 34px;
+  width: 32px;
   height: 32px;
   padding: 0;
   display: inline-flex;
@@ -1261,6 +1467,7 @@ onMounted(async () => {
   line-height: 1;
   border: 0;
   box-shadow: none;
+  color: #4f5c68;
 }
 
 .icon-button :deep(svg) {
@@ -1274,14 +1481,15 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 16px;
+  min-height: 48px;
+  padding: 8px 16px;
   border-bottom: 1px solid #edf0f3;
   background: #ffffff;
 }
 
 .thread-list-scroll {
-  height: calc(100vh - 324px);
-  min-height: 406px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -1289,9 +1497,23 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: 10px;
+  min-height: 104px;
   border-left: 3px solid transparent;
+  border-bottom: 1px solid #edf0f3;
   cursor: pointer;
-  padding: 14px 16px;
+  padding: 13px 16px;
+  outline: none;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.thread-row:hover {
+  background: #f8fafb;
+}
+
+.thread-row:focus-visible {
+  box-shadow: inset 0 0 0 2px #216b55;
 }
 
 .thread-select {
@@ -1300,16 +1522,17 @@ onMounted(async () => {
 }
 
 .thread-row.unread {
-  border-left-color: #1a73e8;
-  background: #f4f8ff;
+  border-left-color: #216b55;
+  background: #f7fbf8;
 }
 
 .thread-row.active {
-  background: #eef8f4;
+  border-left-color: #216b55;
+  background: #edf7f2;
 }
 
 .thread-row.active.unread {
-  background: #eaf4ff;
+  background: #e8f4ef;
 }
 
 .thread-row:not(.unread) .thread-row-top strong,
@@ -1327,25 +1550,46 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
   color: #20262d;
+}
+
+.thread-row-top strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .thread-row-top span {
   color: #697582;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .thread-subject {
   grid-column: 2;
   margin-top: 4px;
+  overflow: hidden;
   color: #20262d;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .thread-row p,
 .thread-row .tag-row {
   grid-column: 2;
+}
+
+.thread-row p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 2px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 
 .tag-row {
@@ -1355,25 +1599,40 @@ onMounted(async () => {
   margin-top: 8px;
 }
 
+.tag-row :deep(.ant-tag) {
+  max-width: 100%;
+  margin-inline-end: 0;
+}
+
 .thread-detail-card {
-  min-height: 660px;
+  height: calc(100vh - 340px);
+  min-height: 520px;
+  overflow-y: auto;
 }
 
 .thread-detail-header {
   align-items: flex-start;
 }
 
+.thread-detail-header > div:first-child {
+  min-width: 0;
+}
+
+.thread-detail-header h2 {
+  overflow-wrap: anywhere;
+}
+
 .message-stack {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   margin-top: 16px;
 }
 
 .message-card {
   display: grid;
   gap: 12px;
-  padding: 14px;
-  border: 1px solid #e0e5eb;
+  padding: 14px 16px;
+  border: 1px solid #e1e7ee;
   border-radius: 8px;
   background: #ffffff;
 }
@@ -1381,12 +1640,22 @@ onMounted(async () => {
 .message-card header div {
   display: grid;
   gap: 2px;
+  min-width: 0;
+}
+
+.message-card header strong,
+.message-card header span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .message-card header span,
 .message-card time {
   color: #697582;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .message-card pre {
@@ -1396,6 +1665,7 @@ onMounted(async () => {
   font-family: inherit;
   line-height: 1.55;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .quoted-toggle {
@@ -1407,12 +1677,23 @@ onMounted(async () => {
 .html-frame {
   width: 100%;
   max-height: 520px;
-  border: 1px solid #edf0f3;
+  border: 1px solid #e8edf2;
   border-radius: 8px;
   background: #ffffff;
 }
 
 @media (max-width: 1100px) {
+  .toolbar-row,
+  .toolbar-row-primary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolbar-actions {
+    justify-content: space-between;
+    width: 100%;
+  }
+
   .email-workspace {
     grid-template-columns: 1fr;
   }
@@ -1423,6 +1704,10 @@ onMounted(async () => {
   }
 
   .mail-view-tabs {
+    width: 100%;
+  }
+
+  .mail-view-tabs :deep(.ant-segmented) {
     width: 100%;
   }
 
@@ -1447,8 +1732,48 @@ onMounted(async () => {
     flex-direction: column;
   }
 
+  .account-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
   .google-login-button {
     width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .page-header {
+    gap: 12px;
+  }
+
+  .mail-toolbar,
+  .google-auth-panel {
+    padding: 14px;
+  }
+
+  .thread-detail-header,
+  .message-card header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .header-actions :deep(.ant-btn) {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .thread-list-card {
+    height: 520px;
+  }
+
+  .thread-list-scroll {
+    height: 406px;
   }
 }
 </style>

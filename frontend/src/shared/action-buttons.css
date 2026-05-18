@@ -1,0 +1,37 @@
+.action-button-add {
+  border-color: #2f7d5a;
+  background: #2f7d5a;
+  color: #ffffff;
+  font-weight: 550;
+}
+
+.action-button-add:hover,
+.action-button-add:focus-visible {
+  border-color: #256848;
+  background: #256848;
+  color: #ffffff;
+}
+
+.action-button-edit {
+  border-color: #9eb2c7;
+  background: #f7fafc;
+  color: #23496f;
+  font-weight: 500;
+}
+
+.action-button-edit:hover,
+.action-button-edit:focus-visible {
+  border-color: #4776a3;
+  background: #edf5fb;
+  color: #173e64;
+}
+
+.action-button-add:disabled,
+.action-button-add[disabled],
+.action-button-edit:disabled,
+.action-button-edit[disabled] {
+  border-color: #d9d9d9;
+  background: #f5f5f5;
+  color: rgb(0 0 0 / 25%);
+  font-weight: 500;
+}

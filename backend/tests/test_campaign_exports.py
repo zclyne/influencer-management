@@ -25,7 +25,7 @@ def test_campaign_export_with_no_deals(api_client: TestClient, db_session: Sessi
 
     assert response.status_code == 200
     rows = list(csv.reader(StringIO(response.text)))
-    assert rows[0][:3] == ["campaign_name", "brand_names", "deal_status"]
+    assert rows[0][:3] == ["influencer_display_name", "deal_status", "lost_reason"]
     assert len(rows) == 1
 
 
@@ -76,8 +76,8 @@ def test_campaign_export_includes_deal_summaries_and_filters(
     assert response.status_code == 200
     rows = list(csv.DictReader(StringIO(response.text)))
     assert len(rows) == 1
-    assert rows[0]["campaign_name"] == "Launch Élite"
-    assert rows[0]["brand_names"] == "TCL"
+    assert "campaign_name" not in rows[0]
+    assert "brand_names" not in rows[0]
     assert rows[0]["influencer_display_name"] == "Créateur"
     assert rows[0]["primary_contact_email"] == "creator@example.com"
     assert rows[0]["cash_total"] == "500.00"

@@ -4,6 +4,7 @@ from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.schemas.common import ApiErrorResponse
 
@@ -69,5 +70,46 @@ async def validation_exception_handler(
             details=jsonable_encoder(
                 {"errors": errors, "path": str(request.url.path)}
             ),
+        ),
+    )
+
+
+async def http_exception_handler(
+    request: Request,
+    exc: StarletteHTTPException,
+) -> JSONResponse:
+    detail = exc.detail
+    message = detail if isinstance(detail, str) else exc.__class__.__name__
+    details: dict[str, Any] = {"path": str(request.url.path)}
+    if not isinstance(detail, str) and detail is not None:
+        details["detail"] = jsonable_encoder(detail)
+
+    if exc.status_code == 404:
+        code = "not_found"
+    elif exc.status_code >= 500:
+        code = "server_error"
+    else:
+        code = "request_error"
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=api_error_payload(
+            code=code,
+            message=message or "Request failed.",
+            details=details,
+        ),
+    )
+
+
+async def unhandled_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content=api_error_payload(
+            code="server_error",
+            message="Internal server error.",
+            details={"path": str(request.url.path)},
         ),
     )
