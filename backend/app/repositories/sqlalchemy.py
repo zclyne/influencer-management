@@ -550,6 +550,64 @@ class StoredFileRepository(SqlAlchemyRepository[models.StoredFile]):
         self.db.flush()
 
 
+class DealAttachmentRepository(SqlAlchemyRepository[models.DealAttachment]):
+    model = models.DealAttachment
+
+    def list_for_deal(self, deal_id: str) -> list[models.DealAttachment]:
+        return list(
+            self.db.scalars(
+                select(models.DealAttachment)
+                .options(selectinload(models.DealAttachment.file))
+                .where(models.DealAttachment.deal_id == deal_id)
+                .order_by(models.DealAttachment.created_at.desc())
+            )
+        )
+
+    def get_for_deal(self, deal_id: str, attachment_id: str) -> models.DealAttachment | None:
+        return self.db.scalar(
+            select(models.DealAttachment)
+            .options(selectinload(models.DealAttachment.file))
+            .where(
+                models.DealAttachment.id == attachment_id,
+                models.DealAttachment.deal_id == deal_id,
+            )
+        )
+
+    def delete(self, attachment: models.DealAttachment) -> None:
+        self.db.delete(attachment)
+        self.db.flush()
+
+
+class CampaignAttachmentRepository(SqlAlchemyRepository[models.CampaignAttachment]):
+    model = models.CampaignAttachment
+
+    def list_for_campaign(self, campaign_id: str) -> list[models.CampaignAttachment]:
+        return list(
+            self.db.scalars(
+                select(models.CampaignAttachment)
+                .options(selectinload(models.CampaignAttachment.file))
+                .where(models.CampaignAttachment.campaign_id == campaign_id)
+                .order_by(models.CampaignAttachment.created_at.desc())
+            )
+        )
+
+    def get_for_campaign(
+        self, campaign_id: str, attachment_id: str
+    ) -> models.CampaignAttachment | None:
+        return self.db.scalar(
+            select(models.CampaignAttachment)
+            .options(selectinload(models.CampaignAttachment.file))
+            .where(
+                models.CampaignAttachment.id == attachment_id,
+                models.CampaignAttachment.campaign_id == campaign_id,
+            )
+        )
+
+    def delete(self, attachment: models.CampaignAttachment) -> None:
+        self.db.delete(attachment)
+        self.db.flush()
+
+
 class JobRecordRepository(SqlAlchemyRepository[models.JobRecord]):
     model = models.JobRecord
 

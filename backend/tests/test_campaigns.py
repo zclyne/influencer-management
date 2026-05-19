@@ -1,10 +1,18 @@
+import os
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.db.models import Campaign, CampaignBrand
-from app.enums import CampaignStatus
-from app.repositories.sqlalchemy import BrandRepository, CampaignRepository
+from app.enums import CampaignStatus, StoredFileKind
+from app.repositories.sqlalchemy import (
+    BrandRepository,
+    CampaignAttachmentRepository,
+    CampaignRepository,
+)
 
 
 def test_campaign_crud_and_archive(api_client: TestClient, db_session: Session) -> None:
@@ -196,3 +204,104 @@ def test_campaign_brand_link_errors(api_client: TestClient, db_session: Session)
     )
     assert missing_campaign_response.status_code == 404
     assert missing_campaign_response.json()["details"] == {"campaign_id": "missing-campaign"}
+
+
+def test_campaign_attachment_upload_list_download_and_delete(
+    api_client: TestClient,
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    os.environ["LOCAL_STORAGE_DIR"] = str(tmp_path)
+    get_settings.cache_clear()
+    campaign = CampaignRepository(db_session).create(name="Spring Launch")
+    db_session.commit()
+
+    upload_response = api_client.post(
+        f"/api/v1/campaigns/{campaign.id}/attachments",
+        files={"file": ("../brief.txt", b"campaign brief", "text/plain")},
+    )
+
+    assert upload_response.status_code == 201
+    uploaded = upload_response.json()
+    assert uploaded["campaign_id"] == campaign.id
+    assert uploaded["file"]["kind"] == StoredFileKind.CAMPAIGN_ATTACHMENT.value
+    assert uploaded["file"]["original_name"] == "brief.txt"
+    assert uploaded["file"]["size_bytes"] == len(b"campaign brief")
+    assert uploaded["file"]["exists"] is True
+
+    list_response = api_client.get(f"/api/v1/campaigns/{campaign.id}/attachments")
+    assert list_response.status_code == 200
+    attachments = list_response.json()["attachments"]
+    assert [attachment["id"] for attachment in attachments] == [uploaded["id"]]
+
+    download_response = api_client.get(f"/api/v1/files/{uploaded['file']['id']}/download")
+    assert download_response.status_code == 200
+    assert download_response.content == b"campaign brief"
+
+    delete_response = api_client.delete(
+        f"/api/v1/campaigns/{campaign.id}/attachments/{uploaded['id']}"
+    )
+    assert delete_response.status_code == 204
+    assert CampaignAttachmentRepository(db_session).list_for_campaign(campaign.id) == []
+
+    deleted_file_response = api_client.get(f"/api/v1/files/{uploaded['file']['id']}")
+    assert deleted_file_response.status_code == 404
+
+
+def test_campaign_attachment_list_is_empty_when_campaign_has_no_attachments(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    campaign = CampaignRepository(db_session).create(name="Spring Launch")
+    db_session.commit()
+
+    response = api_client.get(f"/api/v1/campaigns/{campaign.id}/attachments")
+
+    assert response.status_code == 200
+    assert response.json() == {"attachments": []}
+
+
+def test_campaign_attachment_is_campaign_scoped_and_archived_campaigns_are_read_only(
+    api_client: TestClient,
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    os.environ["LOCAL_STORAGE_DIR"] = str(tmp_path)
+    get_settings.cache_clear()
+    first_campaign = CampaignRepository(db_session).create(name="Spring Launch")
+    second_campaign = CampaignRepository(db_session).create(name="Summer Launch")
+    db_session.commit()
+
+    upload_response = api_client.post(
+        f"/api/v1/campaigns/{first_campaign.id}/attachments",
+        files={"file": ("references.pdf", b"pdf", "application/pdf")},
+    )
+    assert upload_response.status_code == 201
+    attachment_id = upload_response.json()["id"]
+
+    wrong_campaign_delete_response = api_client.delete(
+        f"/api/v1/campaigns/{second_campaign.id}/attachments/{attachment_id}"
+    )
+    assert wrong_campaign_delete_response.status_code == 404
+
+    archived_response = api_client.delete(f"/api/v1/campaigns/{first_campaign.id}")
+    assert archived_response.status_code == 204
+
+    archived_list_response = api_client.get(
+        f"/api/v1/campaigns/{first_campaign.id}/attachments"
+    )
+    assert archived_list_response.status_code == 200
+    assert len(archived_list_response.json()["attachments"]) == 1
+
+    archived_upload_response = api_client.post(
+        f"/api/v1/campaigns/{first_campaign.id}/attachments",
+        files={"file": ("after-archive.txt", b"blocked", "text/plain")},
+    )
+    assert archived_upload_response.status_code == 422
+    assert archived_upload_response.json()["code"] == "archived_campaign"
+
+    archived_delete_response = api_client.delete(
+        f"/api/v1/campaigns/{first_campaign.id}/attachments/{attachment_id}"
+    )
+    assert archived_delete_response.status_code == 422
+    assert archived_delete_response.json()["code"] == "archived_campaign"

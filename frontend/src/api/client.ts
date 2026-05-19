@@ -5,6 +5,8 @@ import type {
   BrandResponse,
   BrandUpdateRequest,
   CampaignCreateRequest,
+  CampaignAttachmentListResponse,
+  CampaignAttachmentResponse,
   CampaignListResponse,
   CampaignResponse,
   CampaignStatus,
@@ -13,6 +15,8 @@ import type {
   DealBulkCreateResponse,
   DealBulkUpdateRequest,
   DealBulkUpdateResponse,
+  DealAttachmentListResponse,
+  DealAttachmentResponse,
   DealDetailResponse,
   DealListResponse,
   DealStatus,
@@ -68,6 +72,21 @@ export class ApiError extends Error {
   }
 }
 
+export class NetworkError extends Error {
+  url: string
+  cause: unknown
+
+  constructor(url: string, cause: unknown) {
+    super(
+      `Could not reach the CreatorFlow API at ${url}. Check that the backend is running, ` +
+        `VITE_API_BASE_URL is correct, and the browser can access the API origin.`,
+    )
+    this.name = 'NetworkError'
+    this.url = url
+    this.cause = cause
+  }
+}
+
 const fallbackError = (status: number, message: string): ApiErrorResponse => ({
   code: status >= 500 ? 'server_error' : 'request_error',
   message,
@@ -120,6 +139,11 @@ export const errorMessage = (error: unknown) => {
     return parts.join(' | ')
   }
 
+  if (error instanceof NetworkError) {
+    const causeMessage = error.cause instanceof Error ? error.cause.message : null
+    return causeMessage ? `${error.message} Browser error: ${causeMessage}.` : error.message
+  }
+
   if (error instanceof Error) return error.message
   return 'Unexpected error'
 }
@@ -132,10 +156,16 @@ export const apiRequest = async <T>(path: string, init: RequestInit = {}): Promi
     headers.set('Content-Type', 'application/json')
   }
 
-  const response = await fetch(`${apiRoot}${path}`, {
-    ...init,
-    headers,
-  })
+  const url = `${apiRoot}${path}`
+  let response: Response
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers,
+    })
+  } catch (requestError) {
+    throw new NetworkError(url, requestError)
+  }
 
   if (!response.ok) {
     throw new ApiError(response.status, await parseError(response))
@@ -223,6 +253,45 @@ export const archiveDeal = (dealId: string) =>
   apiRequest<void>(`/deals/${dealId}`, {
     method: 'DELETE',
   })
+
+export const listCampaignAttachments = (campaignId: string) =>
+  apiRequest<CampaignAttachmentListResponse>(`/campaigns/${campaignId}/attachments`)
+
+export const uploadCampaignAttachment = (campaignId: string, file: File) => {
+  const body = new FormData()
+  body.append('file', file)
+
+  return apiRequest<CampaignAttachmentResponse>(`/campaigns/${campaignId}/attachments`, {
+    method: 'POST',
+    body,
+  })
+}
+
+export const deleteCampaignAttachment = (campaignId: string, attachmentId: string) =>
+  apiRequest<void>(`/campaigns/${campaignId}/attachments/${attachmentId}`, {
+    method: 'DELETE',
+  })
+
+export const listDealAttachments = (dealId: string) =>
+  apiRequest<DealAttachmentListResponse>(`/deals/${dealId}/attachments`)
+
+export const uploadDealAttachment = (dealId: string, file: File) => {
+  const body = new FormData()
+  body.append('file', file)
+
+  return apiRequest<DealAttachmentResponse>(`/deals/${dealId}/attachments`, {
+    method: 'POST',
+    body,
+  })
+}
+
+export const deleteDealAttachment = (dealId: string, attachmentId: string) =>
+  apiRequest<void>(`/deals/${dealId}/attachments/${attachmentId}`, {
+    method: 'DELETE',
+  })
+
+export const fileDownloadUrl = (fileId: string) =>
+  `${apiRoot}/files/${encodeURIComponent(fileId)}/download`
 
 export const listDealDeliverables = (dealId: string) =>
   apiRequest<DeliverableListResponse>(`/deals/${dealId}/deliverables`)

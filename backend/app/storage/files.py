@@ -9,7 +9,9 @@ from app.enums import StoredFileKind
 KIND_DIRECTORIES = {
     StoredFileKind.IMPORT_SOURCE: "imports",
     StoredFileKind.CAMPAIGN_EXPORT: "exports",
+    StoredFileKind.CAMPAIGN_ATTACHMENT: "campaign_attachments",
     StoredFileKind.RECEIPT: "receipts",
+    StoredFileKind.DEAL_ATTACHMENT: "deal_attachments",
     StoredFileKind.EMAIL_ATTACHMENT: "email_attachments",
     StoredFileKind.GENERATED_DOCUMENT: "generated",
 }

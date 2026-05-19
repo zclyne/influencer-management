@@ -76,6 +76,8 @@ class JobStatus(StrEnum):
 class StoredFileKind(StrEnum):
     IMPORT_SOURCE = "import_source"
     CAMPAIGN_EXPORT = "campaign_export"
+    CAMPAIGN_ATTACHMENT = "campaign_attachment"
     RECEIPT = "receipt"
+    DEAL_ATTACHMENT = "deal_attachment"
     EMAIL_ATTACHMENT = "email_attachment"
     GENERATED_DOCUMENT = "generated_document"

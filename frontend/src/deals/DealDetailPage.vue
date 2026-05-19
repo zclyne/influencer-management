@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
-import { Mail, Paperclip, Pencil, Plus, Trash2, User } from '@lucide/vue'
+import {
+  message,
+  Modal,
+  type FormInstance,
+  type TableColumnsType,
+  type UploadProps,
+} from 'ant-design-vue'
+import { Download, Mail, Paperclip, Pencil, Plus, Trash2, User } from '@lucide/vue'
 import type {
   CompensationItemResponse,
   CompensationItemStatus,
   CompensationItemType,
+  DealAttachmentResponse,
   DealStatus,
   DeliverableResponse,
   DeliverableStatus,
@@ -67,6 +74,7 @@ const editingCompensationItem = ref<CompensationItemResponse | null>(null)
 const {
   campaign,
   deal,
+  attachments,
   deliverables,
   compensationItems,
   loading,
@@ -76,6 +84,9 @@ const {
   influencerName,
   loadDealDetail,
   updateDealDetail,
+  uploadAttachment,
+  deleteAttachment,
+  attachmentDownloadUrl,
   createDeliverable,
   updateDeliverable,
   deleteDeliverable,
@@ -228,12 +239,39 @@ const formatDate = (value: string | null | undefined) => {
   }).format(new Date(value))
 }
 
+const formatDateTime = (value: string | null | undefined) => {
+  if (!value) return 'Not set'
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
 const formatNumber = (value: number | null | undefined) => {
   if (value === null || value === undefined) return null
   return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(
     value,
   )
 }
+
+const formatBytes = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return 'Unknown size'
+  if (value < 1024) return `${value} B`
+  const units = ['KB', 'MB', 'GB']
+  let size = value / 1024
+  let unitIndex = 0
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex += 1
+  }
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+const attachmentTypeLabel = (attachment: DealAttachmentResponse) =>
+  attachment.file.mime_type || 'Unknown type'
 
 const platformLabel = (platform: PrimaryPlatformSummary) => {
   const username = platform.username ? ` @${platform.username}` : ''
@@ -468,6 +506,25 @@ const removeCompensationItem = async (item: CompensationItemResponse) => {
   }
 }
 
+const beforeAttachmentUpload: UploadProps['beforeUpload'] = async (selectedFile) => {
+  try {
+    await uploadAttachment(selectedFile as File)
+    message.success('Attachment uploaded.')
+  } catch {
+    message.error('Attachment could not be uploaded.')
+  }
+  return false
+}
+
+const removeAttachment = async (attachment: DealAttachmentResponse) => {
+  try {
+    await deleteAttachment(attachment.id)
+    message.success('Attachment deleted.')
+  } catch {
+    message.error('Attachment could not be deleted.')
+  }
+}
+
 const confirmArchive = () => {
   if (!deal.value) return
 
@@ -531,16 +588,16 @@ void loadDealDetail()
             </div>
           </div>
           <div class="page-actions">
-            <a-button class="action-button-edit" @click="openDealEdit">
-              <Pencil class="button-leading-icon" aria-hidden="true" />
-              Edit deal
-            </a-button>
             <RouterLink :to="{ name: 'email', query: { campaignId, dealId } }">
               <a-button>
                 <Mail class="button-leading-icon" aria-hidden="true" />
                 Open email
               </a-button>
             </RouterLink>
+            <a-button class="action-button-edit" @click="openDealEdit">
+              <Pencil class="button-leading-icon" aria-hidden="true" />
+              Edit
+            </a-button>
             <a-button
               danger
               :disabled="Boolean(deal.archived_at)"
@@ -737,10 +794,15 @@ void loadDealDetail()
               <template #title>Influencer</template>
               <template #extra>
                 <RouterLink :to="{ name: 'influencerDetail', params: { influencerId: deal.influencer.id } }">
-                  <a-button>
-                    <User class="button-leading-icon" aria-hidden="true" />
-                    Open
-                  </a-button>
+                  <a-tooltip title="Open influencer">
+                    <a-button
+                      type="text"
+                      class="side-card-icon-button"
+                      aria-label="Open influencer"
+                    >
+                      <User aria-hidden="true" />
+                    </a-button>
+                  </a-tooltip>
                 </RouterLink>
               </template>
               <h2>{{ deal.influencer.display_name }}</h2>
@@ -782,10 +844,16 @@ void loadDealDetail()
             <a-card class="side-card">
               <template #title>Tags</template>
               <template #extra>
-                <a-button class="action-button-edit" @click="openTagsEdit">
-                  <Pencil class="button-leading-icon" aria-hidden="true" />
-                  Edit
-                </a-button>
+                <a-tooltip title="Edit tags">
+                  <a-button
+                    type="text"
+                    class="side-card-icon-button"
+                    aria-label="Edit tags"
+                    @click="openTagsEdit"
+                  >
+                    <Pencil aria-hidden="true" />
+                  </a-button>
+                </a-tooltip>
               </template>
               <div v-if="deal.labels.length" class="tag-row">
                 <a-tag v-for="tag in deal.labels" :key="tag">{{ tag }}</a-tag>
@@ -796,27 +864,114 @@ void loadDealDetail()
             <a-card class="side-card">
               <template #title>Notes</template>
               <template #extra>
-                <a-button class="action-button-edit" @click="openDealEdit">
-                  <Pencil class="button-leading-icon" aria-hidden="true" />
-                  Edit
-                </a-button>
+                <a-tooltip title="Edit notes">
+                  <a-button
+                    type="text"
+                    class="side-card-icon-button"
+                    aria-label="Edit notes"
+                    @click="openDealEdit"
+                  >
+                    <Pencil aria-hidden="true" />
+                  </a-button>
+                </a-tooltip>
               </template>
               <p class="notes">{{ deal.internal_notes || 'No internal notes yet.' }}</p>
             </a-card>
 
             <a-card class="side-card attachments-card">
               <template #title>Attachments</template>
-              <div class="attachments-placeholder">
+              <template #extra>
+                <a-upload
+                  name="file"
+                  class="attachment-upload-trigger"
+                  :before-upload="beforeAttachmentUpload"
+                  :show-upload-list="false"
+                  :disabled="Boolean(deal.archived_at) || mutating"
+                >
+                  <a-tooltip title="Attach file">
+                    <a-button
+                      type="text"
+                      class="side-card-icon-button"
+                      :loading="mutating"
+                      :disabled="Boolean(deal.archived_at)"
+                      aria-label="Attach file"
+                    >
+                      <Plus aria-hidden="true" />
+                    </a-button>
+                  </a-tooltip>
+                </a-upload>
+              </template>
+              <div v-if="!attachments.length" class="attachments-placeholder">
                 <Paperclip class="attachments-icon" aria-hidden="true" />
                 <div>
                   <strong>No attachments yet</strong>
-                  <span>Deal-scoped attachments are not available yet.</span>
+                  <span>Attach briefs, references, screenshots, or other deal files.</span>
                 </div>
               </div>
-              <a-button disabled block>
-                <Plus class="button-leading-icon" aria-hidden="true" />
-                Attach
-              </a-button>
+              <div v-else class="attachment-list">
+                <div
+                  v-for="attachment in attachments"
+                  :key="attachment.id"
+                  class="attachment-row"
+                >
+                  <Paperclip class="attachment-row-icon" aria-hidden="true" />
+                  <div class="attachment-details">
+                    <strong>{{ attachment.file.original_name }}</strong>
+                    <span>
+                      {{ formatBytes(attachment.file.size_bytes) }} ·
+                      {{ attachmentTypeLabel(attachment) }}
+                    </span>
+                    <span>
+                      Uploaded {{ formatDateTime(attachment.created_at) }}
+                      <template v-if="!attachment.file.exists"> · Missing locally</template>
+                    </span>
+                  </div>
+                  <div class="attachment-actions">
+                    <a
+                      v-if="attachment.file.exists"
+                      :href="attachmentDownloadUrl(attachment.file.id)"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <a-button
+                        class="table-action-icon"
+                        type="text"
+                        title="Download attachment"
+                        aria-label="Download attachment"
+                      >
+                        <Download aria-hidden="true" />
+                      </a-button>
+                    </a>
+                    <a-button
+                      v-else
+                      class="table-action-icon"
+                      type="text"
+                      disabled
+                      title="File missing locally"
+                      aria-label="File missing locally"
+                    >
+                      <Download aria-hidden="true" />
+                    </a-button>
+                    <a-popconfirm
+                      title="Delete this attachment?"
+                      ok-text="Delete"
+                      cancel-text="Cancel"
+                      @confirm="removeAttachment(attachment)"
+                    >
+                      <a-button
+                        class="table-action-icon"
+                        danger
+                        type="text"
+                        title="Delete attachment"
+                        aria-label="Delete attachment"
+                        :disabled="Boolean(deal.archived_at)"
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </a-button>
+                    </a-popconfirm>
+                  </div>
+                </div>
+              </div>
             </a-card>
           </aside>
         </div>
@@ -1016,6 +1171,20 @@ h1 {
 .table-action-icon :deep(svg) {
   width: 16px;
   height: 16px;
+}
+
+.side-card-icon-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.side-card-icon-button :deep(svg) {
+  width: 15px;
+  height: 15px;
 }
 
 h2 {
@@ -1269,6 +1438,59 @@ h2 {
   width: 18px;
   height: 18px;
   margin-top: 1px;
+}
+
+.attachment-list {
+  display: grid;
+  gap: 10px;
+}
+
+.attachment-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.attachment-row-icon {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  color: #697582;
+}
+
+.attachment-details {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.attachment-details strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #34424f;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.attachment-details span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #697582;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .cell-note {

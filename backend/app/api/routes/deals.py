@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, File, Response, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.schemas.compensation import (
     CompensationItemResponse,
     CompensationItemUpdateRequest,
 )
+from app.schemas.deal_attachments import DealAttachmentListResponse, DealAttachmentResponse
 from app.schemas.deals import (
     ApiErrorResponse,
     DealBulkCreateRequest,
@@ -30,6 +31,7 @@ from app.schemas.deliverables import (
     DeliverableUpdateRequest,
 )
 from app.services.compensation import CompensationItemService
+from app.services.deal_attachments import DealAttachmentService
 from app.services.deals import DealService, DealServiceError
 from app.services.deliverables import DeliverableService
 
@@ -179,6 +181,61 @@ def archive_deal(
 ) -> Response | JSONResponse:
     try:
         DealService(db).archive_deal(deal_id)
+    except DealServiceError as exc:
+        return _http_error_response(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/deals/{deal_id}/attachments",
+    response_model=DealAttachmentListResponse,
+    responses=ERROR_RESPONSES,
+)
+def list_deal_attachments(
+    deal_id: str,
+    db: Annotated[Session, Depends(get_db)],
+) -> DealAttachmentListResponse | JSONResponse:
+    try:
+        return DealAttachmentService(db).list_for_deal(deal_id)
+    except DealServiceError as exc:
+        return _http_error_response(exc)
+
+
+@router.post(
+    "/deals/{deal_id}/attachments",
+    status_code=status.HTTP_201_CREATED,
+    response_model=DealAttachmentResponse,
+    responses=ERROR_RESPONSES,
+)
+async def upload_deal_attachment(
+    deal_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    file: Annotated[UploadFile, File()],
+) -> DealAttachmentResponse | JSONResponse:
+    try:
+        return DealAttachmentService(db).upload(
+            deal_id,
+            original_name=file.filename or "attachment",
+            content=await file.read(),
+            mime_type=file.content_type,
+        )
+    except DealServiceError as exc:
+        return _http_error_response(exc)
+
+
+@router.delete(
+    "/deals/{deal_id}/attachments/{attachment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    responses=ERROR_RESPONSES,
+)
+def delete_deal_attachment(
+    deal_id: str,
+    attachment_id: str,
+    db: Annotated[Session, Depends(get_db)],
+) -> Response | JSONResponse:
+    try:
+        DealAttachmentService(db).delete(deal_id, attachment_id)
     except DealServiceError as exc:
         return _http_error_response(exc)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

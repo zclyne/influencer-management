@@ -1,9 +1,14 @@
+import os
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.enums import DealStatus
+from app.core.config import get_settings
+from app.enums import DealStatus, StoredFileKind
 from app.repositories.sqlalchemy import (
     CampaignRepository,
+    DealAttachmentRepository,
     DealRepository,
     InfluencerContactRepository,
     InfluencerPlatformRepository,
@@ -211,3 +216,113 @@ def test_deal_error_paths(api_client: TestClient, db_session: Session) -> None:
     missing_deal_response = api_client.get("/api/v1/deals/missing")
     assert missing_deal_response.status_code == 404
     assert missing_deal_response.json()["details"] == {"deal_id": "missing"}
+
+
+def test_deal_attachment_upload_list_download_and_delete(
+    api_client: TestClient,
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    os.environ["LOCAL_STORAGE_DIR"] = str(tmp_path)
+    get_settings.cache_clear()
+    campaign_id, influencer_id = _seed_campaign_and_influencer(db_session)
+    deal = DealRepository(db_session).create(campaign_id=campaign_id, influencer_id=influencer_id)
+    db_session.commit()
+
+    upload_response = api_client.post(
+        f"/api/v1/deals/{deal.id}/attachments",
+        files={"file": ("../brief.txt", b"creator brief", "text/plain")},
+    )
+
+    assert upload_response.status_code == 201
+    uploaded = upload_response.json()
+    assert uploaded["deal_id"] == deal.id
+    assert uploaded["file"]["kind"] == StoredFileKind.DEAL_ATTACHMENT.value
+    assert uploaded["file"]["original_name"] == "brief.txt"
+    assert uploaded["file"]["size_bytes"] == len(b"creator brief")
+    assert uploaded["file"]["exists"] is True
+
+    list_response = api_client.get(f"/api/v1/deals/{deal.id}/attachments")
+    assert list_response.status_code == 200
+    attachments = list_response.json()["attachments"]
+    assert [attachment["id"] for attachment in attachments] == [uploaded["id"]]
+
+    download_response = api_client.get(f"/api/v1/files/{uploaded['file']['id']}/download")
+    assert download_response.status_code == 200
+    assert download_response.content == b"creator brief"
+
+    delete_response = api_client.delete(
+        f"/api/v1/deals/{deal.id}/attachments/{uploaded['id']}"
+    )
+    assert delete_response.status_code == 204
+    assert DealAttachmentRepository(db_session).list_for_deal(deal.id) == []
+
+    deleted_file_response = api_client.get(f"/api/v1/files/{uploaded['file']['id']}")
+    assert deleted_file_response.status_code == 404
+
+
+def test_deal_attachment_list_is_empty_when_deal_has_no_attachments(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    campaign_id, influencer_id = _seed_campaign_and_influencer(db_session)
+    deal = DealRepository(db_session).create(campaign_id=campaign_id, influencer_id=influencer_id)
+    db_session.commit()
+
+    response = api_client.get(f"/api/v1/deals/{deal.id}/attachments")
+
+    assert response.status_code == 200
+    assert response.json() == {"attachments": []}
+
+
+def test_deal_attachment_is_deal_scoped_and_archived_deals_are_read_only(
+    api_client: TestClient,
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    os.environ["LOCAL_STORAGE_DIR"] = str(tmp_path)
+    get_settings.cache_clear()
+    campaign = CampaignRepository(db_session).create(name="Spring Launch")
+    first = InfluencerRepository(db_session).create(display_name="Creator One")
+    second = InfluencerRepository(db_session).create(display_name="Creator Two")
+    first_deal = DealRepository(db_session).create(
+        campaign_id=campaign.id,
+        influencer_id=first.id,
+    )
+    second_deal = DealRepository(db_session).create(
+        campaign_id=campaign.id,
+        influencer_id=second.id,
+    )
+    db_session.commit()
+
+    upload_response = api_client.post(
+        f"/api/v1/deals/{first_deal.id}/attachments",
+        files={"file": ("contract.pdf", b"pdf", "application/pdf")},
+    )
+    assert upload_response.status_code == 201
+    attachment_id = upload_response.json()["id"]
+
+    wrong_deal_delete_response = api_client.delete(
+        f"/api/v1/deals/{second_deal.id}/attachments/{attachment_id}"
+    )
+    assert wrong_deal_delete_response.status_code == 404
+
+    archived_response = api_client.delete(f"/api/v1/deals/{first_deal.id}")
+    assert archived_response.status_code == 204
+
+    archived_list_response = api_client.get(f"/api/v1/deals/{first_deal.id}/attachments")
+    assert archived_list_response.status_code == 200
+    assert len(archived_list_response.json()["attachments"]) == 1
+
+    archived_upload_response = api_client.post(
+        f"/api/v1/deals/{first_deal.id}/attachments",
+        files={"file": ("after-archive.txt", b"blocked", "text/plain")},
+    )
+    assert archived_upload_response.status_code == 422
+    assert archived_upload_response.json()["code"] == "archived_deal"
+
+    archived_delete_response = api_client.delete(
+        f"/api/v1/deals/{first_deal.id}/attachments/{attachment_id}"
+    )
+    assert archived_delete_response.status_code == 422
+    assert archived_delete_response.json()["code"] == "archived_deal"

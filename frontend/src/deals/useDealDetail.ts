@@ -2,13 +2,17 @@ import { computed, ref } from 'vue'
 import {
   createDealCompensationItem,
   createDealDeliverable,
+  deleteDealAttachment,
   deleteDealCompensationItem,
   deleteDealDeliverable,
   errorMessage,
+  fileDownloadUrl,
   getCampaign,
   getDeal,
+  listDealAttachments,
   listDealCompensationItems,
   listDealDeliverables,
+  uploadDealAttachment,
   updateDeal,
   updateDealCompensationItem,
   updateDealDeliverable,
@@ -19,6 +23,7 @@ import type {
   CompensationItemCreateRequest,
   CompensationItemResponse,
   CompensationItemUpdateRequest,
+  DealAttachmentResponse,
   DealDetailResponse,
   DealUpdateRequest,
   DeliverableCreateRequest,
@@ -29,6 +34,7 @@ import type {
 export const useDealDetail = (dealId: () => string, campaignId: () => string) => {
   const campaign = ref<CampaignResponse | null>(null)
   const deal = ref<DealDetailResponse | null>(null)
+  const attachments = ref<DealAttachmentResponse[]>([])
   const deliverables = ref<DeliverableResponse[]>([])
   const compensationItems = ref<CompensationItemResponse[]>([])
   const loading = ref(false)
@@ -55,6 +61,14 @@ export const useDealDetail = (dealId: () => string, campaignId: () => string) =>
       deal.value = dealResponse
       deliverables.value = deliverablesResponse.deliverables
       compensationItems.value = compensationResponse.compensation_items
+
+      try {
+        const attachmentsResponse = await listDealAttachments(currentDealId)
+        attachments.value = attachmentsResponse.attachments
+      } catch (attachmentError) {
+        attachments.value = []
+        error.value = `Deal loaded, but attachments could not be loaded. ${errorMessage(attachmentError)}`
+      }
     } catch (loadError) {
       error.value = errorMessage(loadError)
     } finally {
@@ -73,6 +87,13 @@ export const useDealDetail = (dealId: () => string, campaignId: () => string) =>
     if (!currentDealId) return
     const response = await listDealDeliverables(currentDealId)
     deliverables.value = response.deliverables
+  }
+
+  const refreshAttachments = async () => {
+    const currentDealId = dealId()
+    if (!currentDealId) return
+    const response = await listDealAttachments(currentDealId)
+    attachments.value = response.attachments
   }
 
   const refreshCompensationItems = async () => {
@@ -110,6 +131,38 @@ export const useDealDetail = (dealId: () => string, campaignId: () => string) =>
       mutating.value = false
     }
   }
+
+  const uploadAttachment = async (file: File) => {
+    mutating.value = true
+    error.value = null
+
+    try {
+      await uploadDealAttachment(dealId(), file)
+      await refreshAttachments()
+    } catch (mutationError) {
+      error.value = errorMessage(mutationError)
+      throw mutationError
+    } finally {
+      mutating.value = false
+    }
+  }
+
+  const deleteAttachment = async (attachmentId: string) => {
+    mutating.value = true
+    error.value = null
+
+    try {
+      await deleteDealAttachment(dealId(), attachmentId)
+      await refreshAttachments()
+    } catch (mutationError) {
+      error.value = errorMessage(mutationError)
+      throw mutationError
+    } finally {
+      mutating.value = false
+    }
+  }
+
+  const attachmentDownloadUrl = (fileId: string) => fileDownloadUrl(fileId)
 
   const updateDeliverable = async (
     deliverableId: string,
@@ -212,6 +265,7 @@ export const useDealDetail = (dealId: () => string, campaignId: () => string) =>
   return {
     campaign,
     deal,
+    attachments,
     deliverables,
     compensationItems,
     loading,
@@ -221,6 +275,9 @@ export const useDealDetail = (dealId: () => string, campaignId: () => string) =>
     influencerName,
     loadDealDetail,
     updateDealDetail,
+    uploadAttachment,
+    deleteAttachment,
+    attachmentDownloadUrl,
     createDeliverable,
     updateDeliverable,
     deleteDeliverable,

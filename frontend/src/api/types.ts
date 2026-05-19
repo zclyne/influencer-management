@@ -449,6 +449,27 @@ export type CompensationItemStatus =
   | 'COMPLETED'
   | 'CANCELLED'
 
+export type StoredFileKind =
+  | 'import_source'
+  | 'campaign_export'
+  | 'campaign_attachment'
+  | 'receipt'
+  | 'deal_attachment'
+  | 'email_attachment'
+  | 'generated_document'
+
+export interface StoredFileResponse {
+  id: string
+  kind: StoredFileKind
+  original_name: string
+  mime_type?: string | null
+  size_bytes?: number | null
+  checksum?: string | null
+  exists: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface WorkbenchDeal {
   id: string
   influencerName: string
@@ -519,6 +540,30 @@ export interface DealPipelineRow {
 export interface DealDetailResponse extends DealPipelineRow {
   created_at: string
   source_list_status?: string | null
+}
+
+export interface DealAttachmentResponse {
+  id: string
+  deal_id: string
+  file: StoredFileResponse
+  created_at: string
+  updated_at: string
+}
+
+export interface DealAttachmentListResponse {
+  attachments: DealAttachmentResponse[]
+}
+
+export interface CampaignAttachmentResponse {
+  id: string
+  campaign_id: string
+  file: StoredFileResponse
+  created_at: string
+  updated_at: string
+}
+
+export interface CampaignAttachmentListResponse {
+  attachments: CampaignAttachmentResponse[]
 }
 
 export interface DealListResponse {

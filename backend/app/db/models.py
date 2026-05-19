@@ -71,6 +71,9 @@ class Campaign(TimestampMixin, ArchiveMixin, Base):
         back_populates="campaign", cascade="all, delete-orphan"
     )
     deals: Mapped[list["Deal"]] = relationship(back_populates="campaign")
+    attachments: Mapped[list["CampaignAttachment"]] = relationship(
+        back_populates="campaign", cascade="all, delete-orphan"
+    )
 
 
 class CampaignBrand(TimestampMixin, Base):
@@ -209,6 +212,9 @@ class Deal(TimestampMixin, ArchiveMixin, Base):
     compensation_items: Mapped[list["CompensationItem"]] = relationship(
         back_populates="deal", cascade="all, delete-orphan"
     )
+    attachments: Mapped[list["DealAttachment"]] = relationship(
+        back_populates="deal", cascade="all, delete-orphan"
+    )
 
 
 class Deliverable(TimestampMixin, Base):
@@ -277,6 +283,36 @@ class StoredFile(TimestampMixin, Base):
     mime_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(nullable=True)
     checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+
+class DealAttachment(TimestampMixin, Base):
+    __tablename__ = "deal_attachments"
+    __table_args__ = (
+        Index("ix_deal_attachment_deal_id", "deal_id"),
+        Index("ix_deal_attachment_file_id", "file_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    deal_id: Mapped[str] = mapped_column(ForeignKey("deals.id"), nullable=False)
+    file_id: Mapped[str] = mapped_column(ForeignKey("stored_files.id"), nullable=False)
+
+    deal: Mapped[Deal] = relationship(back_populates="attachments")
+    file: Mapped[StoredFile] = relationship()
+
+
+class CampaignAttachment(TimestampMixin, Base):
+    __tablename__ = "campaign_attachments"
+    __table_args__ = (
+        Index("ix_campaign_attachment_campaign_id", "campaign_id"),
+        Index("ix_campaign_attachment_file_id", "file_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    campaign_id: Mapped[str] = mapped_column(ForeignKey("campaigns.id"), nullable=False)
+    file_id: Mapped[str] = mapped_column(ForeignKey("stored_files.id"), nullable=False)
+
+    campaign: Mapped[Campaign] = relationship(back_populates="attachments")
+    file: Mapped[StoredFile] = relationship()
 
 
 class JobRecord(Base):

@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { message, Modal, type FormInstance, type TableColumnsType } from 'ant-design-vue'
+import {
+  message,
+  Modal,
+  type FormInstance,
+  type TableColumnsType,
+  type UploadProps,
+} from 'ant-design-vue'
 import { Download, Mail, Paperclip, Pencil, Plus, Trash2 } from '@lucide/vue'
 import type {
+  CampaignAttachmentResponse,
   CampaignStatus,
   CampaignUpdateRequest,
   DealPipelineRow,
@@ -40,6 +47,10 @@ interface TagsForm {
   tags: string[]
 }
 
+interface NotesForm {
+  notes: string
+}
+
 const route = useRoute()
 const router = useRouter()
 const campaignId = computed(() => String(route.params.campaignId ?? ''))
@@ -49,6 +60,7 @@ const addFromLibraryMembershipLoading = ref(false)
 const showOnlyAvailableInfluencers = ref(true)
 const campaignEditOpen = ref(false)
 const tagsModalOpen = ref(false)
+const notesModalOpen = ref(false)
 const bulkStatus = ref<DealStatus | undefined>()
 const notesExpanded = ref(false)
 const notesPreviewLimit = 180
@@ -67,8 +79,13 @@ const tagsForm = reactive<TagsForm>({
   tags: [],
 })
 
+const notesForm = reactive<NotesForm>({
+  notes: '',
+})
+
 const {
   campaign,
+  attachments,
   campaignInfluencerDeals,
   visibleDeals,
   loading,
@@ -91,6 +108,9 @@ const {
   selectDeal,
   updateCampaignProfile,
   archiveCampaignProfile,
+  uploadAttachment,
+  deleteAttachment,
+  attachmentDownloadUrl,
   addInfluencersToCampaign,
   bulkUpdateSelectedDeals,
   archiveDeal,
@@ -242,6 +262,32 @@ const formatDate = (value: string | null | undefined) => {
   }).format(new Date(value))
 }
 
+const formatDateTime = (value: string) => {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
+const formatBytes = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return 'Unknown size'
+  if (value < 1024) return `${value} B`
+  const units = ['KB', 'MB', 'GB']
+  let size = value / 1024
+  let unitIndex = 0
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex += 1
+  }
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+const attachmentTypeLabel = (attachment: CampaignAttachmentResponse) =>
+  attachment.file.mime_type || 'Unknown type'
+
 const formatDateRange = () => {
   const start = formatDate(campaign.value?.start_date)
   const end = formatDate(campaign.value?.end_date)
@@ -344,6 +390,10 @@ const resetTagsForm = () => {
   tagsForm.tags = [...(campaign.value?.tags ?? [])]
 }
 
+const resetNotesForm = () => {
+  notesForm.notes = campaign.value?.notes ?? ''
+}
+
 const buildCampaignPayload = (): CampaignUpdateRequest => ({
   name: campaignForm.name.trim(),
   status: campaignForm.status,
@@ -362,6 +412,11 @@ const openCampaignEdit = () => {
 const openTagsEdit = () => {
   resetTagsForm()
   tagsModalOpen.value = true
+}
+
+const openNotesEdit = () => {
+  resetNotesForm()
+  notesModalOpen.value = true
 }
 
 const submitCampaignEdit = async () => {
@@ -384,6 +439,36 @@ const submitTags = async () => {
     tagsModalOpen.value = false
   } catch (tagError) {
     message.error(tagError instanceof Error ? tagError.message : 'Tags could not be saved.')
+  }
+}
+
+const submitNotes = async () => {
+  try {
+    await updateCampaignProfile({ notes: notesForm.notes.trim() || null })
+    notesExpanded.value = false
+    message.success('Notes updated.')
+    notesModalOpen.value = false
+  } catch {
+    message.error('Notes could not be updated.')
+  }
+}
+
+const beforeAttachmentUpload: UploadProps['beforeUpload'] = async (selectedFile) => {
+  try {
+    await uploadAttachment(selectedFile as File)
+    message.success('Attachment uploaded.')
+  } catch {
+    message.error('Attachment could not be uploaded.')
+  }
+  return false
+}
+
+const removeAttachment = async (attachment: CampaignAttachmentResponse) => {
+  try {
+    await deleteAttachment(attachment.id)
+    message.success('Attachment deleted.')
+  } catch {
+    message.error('Attachment could not be deleted.')
   }
 }
 
@@ -792,14 +877,17 @@ void loadWorkspace()
         <a-card class="side-card" size="small">
           <template #title>Tags</template>
           <template #extra>
-            <a-button
-              class="action-button-edit"
-              :disabled="Boolean(campaign.archived_at)"
-              @click="openTagsEdit"
-            >
-              <Pencil class="button-leading-icon" aria-hidden="true" />
-              Edit
-            </a-button>
+            <a-tooltip title="Edit tags">
+              <a-button
+                type="text"
+                class="side-card-icon-button"
+                :disabled="Boolean(campaign.archived_at)"
+                aria-label="Edit tags"
+                @click="openTagsEdit"
+              >
+                <Pencil aria-hidden="true" />
+              </a-button>
+            </a-tooltip>
           </template>
           <div v-if="campaign.tags.length" class="tag-row">
             <a-tag v-for="tag in campaign.tags" :key="tag">{{ tag }}</a-tag>
@@ -809,6 +897,19 @@ void loadWorkspace()
 
         <a-card class="side-card" size="small">
           <template #title>Notes</template>
+          <template #extra>
+            <a-tooltip title="Edit notes">
+              <a-button
+                type="text"
+                class="side-card-icon-button"
+                :disabled="Boolean(campaign.archived_at)"
+                aria-label="Edit notes"
+                @click="openNotesEdit"
+              >
+                <Pencil aria-hidden="true" />
+              </a-button>
+            </a-tooltip>
+          </template>
           <p class="notes-preview">{{ displayedNotes }}</p>
           <a-button
             v-if="hasLongNotes"
@@ -822,17 +923,98 @@ void loadWorkspace()
 
         <a-card class="side-card attachments-card" size="small">
           <template #title>Attachments</template>
-          <div class="attachments-placeholder">
+          <template #extra>
+            <a-upload
+              name="file"
+              class="attachment-upload-trigger"
+              :before-upload="beforeAttachmentUpload"
+              :show-upload-list="false"
+              :disabled="Boolean(campaign.archived_at) || mutating"
+            >
+              <a-tooltip title="Attach file">
+                <a-button
+                  type="text"
+                  class="side-card-icon-button"
+                  :loading="mutating"
+                  :disabled="Boolean(campaign.archived_at)"
+                  aria-label="Attach file"
+                >
+                  <Plus aria-hidden="true" />
+                </a-button>
+              </a-tooltip>
+            </a-upload>
+          </template>
+          <div v-if="!attachments.length" class="attachments-placeholder">
             <Paperclip class="attachments-icon" aria-hidden="true" />
             <div>
               <strong>No attachments yet</strong>
-              <span>Campaign attachments are not available yet.</span>
+              <span>Attach briefs, references, campaign docs, or other working files.</span>
             </div>
           </div>
-          <a-button disabled block>
-            <Plus class="button-leading-icon" aria-hidden="true" />
-            Upload
-          </a-button>
+          <div v-else class="attachment-list">
+            <div
+              v-for="attachment in attachments"
+              :key="attachment.id"
+              class="attachment-row"
+            >
+              <Paperclip class="attachment-row-icon" aria-hidden="true" />
+              <div class="attachment-details">
+                <strong>{{ attachment.file.original_name }}</strong>
+                <span>
+                  {{ formatBytes(attachment.file.size_bytes) }} ·
+                  {{ attachmentTypeLabel(attachment) }}
+                </span>
+                <span>
+                  Uploaded {{ formatDateTime(attachment.created_at) }}
+                  <template v-if="!attachment.file.exists"> · Missing locally</template>
+                </span>
+              </div>
+              <div class="attachment-actions">
+                <a
+                  v-if="attachment.file.exists"
+                  :href="attachmentDownloadUrl(attachment.file.id)"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <a-button
+                    class="table-action-icon"
+                    type="text"
+                    title="Download attachment"
+                    aria-label="Download attachment"
+                  >
+                    <Download aria-hidden="true" />
+                  </a-button>
+                </a>
+                <a-button
+                  v-else
+                  class="table-action-icon"
+                  type="text"
+                  disabled
+                  title="File missing locally"
+                  aria-label="File missing locally"
+                >
+                  <Download aria-hidden="true" />
+                </a-button>
+                <a-popconfirm
+                  title="Delete this attachment?"
+                  ok-text="Delete"
+                  cancel-text="Cancel"
+                  @confirm="removeAttachment(attachment)"
+                >
+                  <a-button
+                    class="table-action-icon"
+                    danger
+                    type="text"
+                    title="Delete attachment"
+                    aria-label="Delete attachment"
+                    :disabled="Boolean(campaign.archived_at)"
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </a-button>
+                </a-popconfirm>
+              </div>
+            </div>
+          </div>
         </a-card>
       </aside>
     </div>
@@ -915,6 +1097,22 @@ void loadWorkspace()
           <p class="form-help">
             Use up to 20 tags. Tags support letters, numbers, spaces, -, _, /, ., and &.
           </p>
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal
+      v-model:open="notesModalOpen"
+      title="Edit notes"
+      ok-text="Save"
+      cancel-text="Cancel"
+      :confirm-loading="mutating"
+      destroy-on-close
+      @ok="submitNotes"
+    >
+      <a-form :model="notesForm" layout="vertical">
+        <a-form-item label="Notes" name="notes">
+          <a-textarea v-model:value="notesForm.notes" :rows="5" />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -1052,6 +1250,20 @@ h1 {
 .table-action-icon :deep(svg) {
   width: 16px;
   height: 16px;
+}
+
+.side-card-icon-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.side-card-icon-button :deep(svg) {
+  width: 15px;
+  height: 15px;
 }
 
 .page-actions {
@@ -1253,6 +1465,59 @@ h1 {
   width: 18px;
   height: 18px;
   margin-top: 1px;
+}
+
+.attachment-list {
+  display: grid;
+  gap: 10px;
+}
+
+.attachment-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.attachment-row-icon {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  color: #697582;
+}
+
+.attachment-details {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.attachment-details strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #34424f;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.attachment-details span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #697582;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .table-card {

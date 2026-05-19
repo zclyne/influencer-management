@@ -1,8 +1,10 @@
 from app.repositories.sqlalchemy import (
     BrandRepository,
+    CampaignAttachmentRepository,
     CampaignBrandRepository,
     CampaignRepository,
     CompensationItemRepository,
+    DealAttachmentRepository,
     DealRepository,
     DeliverableRepository,
     ImportSessionRepository,
@@ -15,9 +17,11 @@ from app.repositories.sqlalchemy import (
 
 __all__ = [
     "BrandRepository",
+    "CampaignAttachmentRepository",
     "CampaignBrandRepository",
     "CampaignRepository",
     "CompensationItemRepository",
+    "DealAttachmentRepository",
     "DealRepository",
     "DeliverableRepository",
     "ImportSessionRepository",

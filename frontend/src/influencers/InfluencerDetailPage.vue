@@ -551,7 +551,7 @@ void loadInfluencerDetail()
           <div class="page-actions">
             <a-button class="action-button-edit" @click="openProfileEdit">
               <Pencil class="button-leading-icon" aria-hidden="true" />
-              Edit profile
+              Edit
             </a-button>
             <a-button
               danger
@@ -799,31 +799,19 @@ void loadInfluencerDetail()
           </main>
 
           <aside class="profile-sidebar">
-            <a-card class="side-card identity-card" size="small">
-              <template #title>Profile</template>
-              <div class="property-list">
-                <div>
-                  <span>Full name</span>
-                  <strong>{{ influencer.full_name || 'Not set' }}</strong>
-                </div>
-                <div>
-                  <span>Location</span>
-                  <strong>{{ locationLabel }}</strong>
-                </div>
-                <div>
-                  <span>Primary contact</span>
-                  <strong>{{ primaryContactLabel }}</strong>
-                </div>
-              </div>
-            </a-card>
-
             <a-card class="side-card" size="small">
               <template #title>Tags</template>
               <template #extra>
-                <a-button class="action-button-edit" @click="openTagsEdit">
-                  <Pencil class="button-leading-icon" aria-hidden="true" />
-                  Edit
-                </a-button>
+                <a-tooltip title="Edit tags">
+                  <a-button
+                    type="text"
+                    class="side-card-icon-button"
+                    aria-label="Edit tags"
+                    @click="openTagsEdit"
+                  >
+                    <Pencil aria-hidden="true" />
+                  </a-button>
+                </a-tooltip>
               </template>
               <div v-if="influencer.tags.length" class="tag-row">
                 <a-tag v-for="tag in influencer.tags" :key="tag">{{ tag }}</a-tag>
@@ -834,10 +822,16 @@ void loadInfluencerDetail()
             <a-card class="side-card" size="small">
               <template #title>Notes</template>
               <template #extra>
-                <a-button class="action-button-edit" @click="openNotesEdit">
-                  <Pencil class="button-leading-icon" aria-hidden="true" />
-                  Edit
-                </a-button>
+                <a-tooltip title="Edit notes">
+                  <a-button
+                    type="text"
+                    class="side-card-icon-button"
+                    aria-label="Edit notes"
+                    @click="openNotesEdit"
+                  >
+                    <Pencil aria-hidden="true" />
+                  </a-button>
+                </a-tooltip>
               </template>
               <p v-if="influencer.notes" class="notes-content">{{ influencer.notes }}</p>
               <span v-else class="muted">No notes yet.</span>
@@ -1057,6 +1051,20 @@ h1 {
 .table-action-icon :deep(svg) {
   width: 16px;
   height: 16px;
+}
+
+.side-card-icon-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.side-card-icon-button :deep(svg) {
+  width: 15px;
+  height: 15px;
 }
 
 .heading-meta,

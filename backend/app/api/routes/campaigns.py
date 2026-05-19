@@ -1,12 +1,16 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, File, Response, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.errors import ERROR_RESPONSES, service_error_response
 from app.db.session import get_db
 from app.enums import CampaignStatus
+from app.schemas.campaign_attachments import (
+    CampaignAttachmentListResponse,
+    CampaignAttachmentResponse,
+)
 from app.schemas.campaigns import (
     CampaignBrandLinkRequest,
     CampaignBrandResponse,
@@ -16,6 +20,7 @@ from app.schemas.campaigns import (
     CampaignResponse,
     CampaignUpdateRequest,
 )
+from app.services.campaign_attachments import CampaignAttachmentService
 from app.services.campaigns import CampaignService, CampaignServiceError
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
@@ -89,6 +94,61 @@ def archive_campaign(
 ) -> Response | JSONResponse:
     try:
         CampaignService(db).archive_campaign(campaign_id)
+    except CampaignServiceError as exc:
+        return service_error_response(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{campaign_id}/attachments",
+    response_model=CampaignAttachmentListResponse,
+    responses=ERROR_RESPONSES,
+)
+def list_campaign_attachments(
+    campaign_id: str,
+    db: Annotated[Session, Depends(get_db)],
+) -> CampaignAttachmentListResponse | JSONResponse:
+    try:
+        return CampaignAttachmentService(db).list_for_campaign(campaign_id)
+    except CampaignServiceError as exc:
+        return service_error_response(exc)
+
+
+@router.post(
+    "/{campaign_id}/attachments",
+    status_code=status.HTTP_201_CREATED,
+    response_model=CampaignAttachmentResponse,
+    responses=ERROR_RESPONSES,
+)
+async def upload_campaign_attachment(
+    campaign_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    file: Annotated[UploadFile, File()],
+) -> CampaignAttachmentResponse | JSONResponse:
+    try:
+        return CampaignAttachmentService(db).upload(
+            campaign_id,
+            original_name=file.filename or "attachment",
+            content=await file.read(),
+            mime_type=file.content_type,
+        )
+    except CampaignServiceError as exc:
+        return service_error_response(exc)
+
+
+@router.delete(
+    "/{campaign_id}/attachments/{attachment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    responses=ERROR_RESPONSES,
+)
+def delete_campaign_attachment(
+    campaign_id: str,
+    attachment_id: str,
+    db: Annotated[Session, Depends(get_db)],
+) -> Response | JSONResponse:
+    try:
+        CampaignAttachmentService(db).delete(campaign_id, attachment_id)
     except CampaignServiceError as exc:
         return service_error_response(exc)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

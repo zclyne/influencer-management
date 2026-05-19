@@ -4,13 +4,18 @@ import {
   archiveDeal as archiveDealRequest,
   bulkCreateCampaignDeals,
   bulkUpdateCampaignDeals,
+  deleteCampaignAttachment,
   errorMessage,
   exportCampaignCsv,
+  fileDownloadUrl,
   getCampaign,
+  listCampaignAttachments,
   listCampaignDeals,
+  uploadCampaignAttachment,
   updateCampaign,
 } from '../api/client'
 import type {
+  CampaignAttachmentResponse,
   CampaignResponse,
   CampaignUpdateRequest,
   DealBulkUpdateRequest,
@@ -40,6 +45,7 @@ interface CampaignInfluencerDeal {
 
 export const useCampaignWorkspace = (campaignId: () => string) => {
   const campaign = ref<CampaignResponse | null>(null)
+  const attachments = ref<CampaignAttachmentResponse[]>([])
   const deals = ref<DealPipelineRow[]>([])
   const campaignInfluencerDeals = ref<Record<string, CampaignInfluencerDeal>>({})
   const loading = ref(false)
@@ -72,6 +78,14 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
       ])
       campaign.value = campaignResponse
       deals.value = dealsResponse.deals
+
+      try {
+        const attachmentsResponse = await listCampaignAttachments(id)
+        attachments.value = attachmentsResponse.attachments
+      } catch (attachmentError) {
+        attachments.value = []
+        error.value = `Campaign loaded, but attachments could not be loaded. ${errorMessage(attachmentError)}`
+      }
     } catch (loadError) {
       error.value = errorMessage(loadError)
     } finally {
@@ -186,6 +200,45 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
       mutating.value = false
     }
   }
+
+  const refreshAttachments = async () => {
+    const id = campaignId()
+    if (!id) return
+    const response = await listCampaignAttachments(id)
+    attachments.value = response.attachments
+  }
+
+  const uploadAttachment = async (file: File) => {
+    mutating.value = true
+    error.value = null
+
+    try {
+      await uploadCampaignAttachment(campaignId(), file)
+      await refreshAttachments()
+    } catch (mutationError) {
+      error.value = errorMessage(mutationError)
+      throw mutationError
+    } finally {
+      mutating.value = false
+    }
+  }
+
+  const deleteAttachment = async (attachmentId: string) => {
+    mutating.value = true
+    error.value = null
+
+    try {
+      await deleteCampaignAttachment(campaignId(), attachmentId)
+      await refreshAttachments()
+    } catch (mutationError) {
+      error.value = errorMessage(mutationError)
+      throw mutationError
+    } finally {
+      mutating.value = false
+    }
+  }
+
+  const attachmentDownloadUrl = (fileId: string) => fileDownloadUrl(fileId)
 
   const addInfluencersToCampaign = async (influencerIds: string[]) => {
     if (!influencerIds.length) return null
@@ -311,6 +364,7 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
 
   return {
     campaign,
+    attachments,
     deals,
     campaignInfluencerDeals,
     visibleDeals,
@@ -334,6 +388,9 @@ export const useCampaignWorkspace = (campaignId: () => string) => {
     selectDeal,
     updateCampaignProfile,
     archiveCampaignProfile,
+    uploadAttachment,
+    deleteAttachment,
+    attachmentDownloadUrl,
     addInfluencersToCampaign,
     bulkUpdateSelectedDeals,
     archiveDeal,
