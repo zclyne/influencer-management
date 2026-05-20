@@ -8,11 +8,13 @@ import os
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from email.utils import getaddresses, parsedate_to_datetime
+from email.message import EmailMessage
+from email.utils import formataddr, getaddresses, parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
+import bleach
 import httpx
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2.credentials import Credentials as GoogleCredentials
@@ -24,7 +26,9 @@ from app.core.config import Settings, get_settings
 from app.repositories.sqlalchemy import CampaignRepository, DealRepository
 from app.schemas.email_context import (
     EmailCrmLink,
+    EmailDraftSendResponse,
     EmailParticipant,
+    EmailReplyDraftResponse,
     EmailThreadBatchRequest,
     EmailThreadBatchResponse,
     EmailThreadLinkRequest,
@@ -58,6 +62,31 @@ EMAIL_VIEW_QUERIES = {
     "starred": "is:starred",
     "deleted": "in:trash",
     "spam": "in:spam",
+}
+MAX_DRAFT_UPLOAD_BYTES = 24 * 1024 * 1024
+ALLOWED_REPLY_HTML_TAGS = set(bleach.sanitizer.ALLOWED_TAGS).union(
+    {
+        "p",
+        "br",
+        "div",
+        "span",
+        "strong",
+        "em",
+        "u",
+        "ul",
+        "ol",
+        "li",
+        "blockquote",
+        "pre",
+        "code",
+        "a",
+        "img",
+    }
+)
+ALLOWED_REPLY_HTML_ATTRIBUTES = {
+    **bleach.sanitizer.ALLOWED_ATTRIBUTES,
+    "a": ["href", "title", "target", "rel"],
+    "img": ["src", "alt", "title", "width", "height"],
 }
 
 
@@ -102,6 +131,14 @@ class GmailCredential:
     access_token: str | None
     expires_at: datetime | None
     scopes: list[str]
+
+
+@dataclass(frozen=True)
+class EmailDraftFile:
+    filename: str
+    content_type: str
+    content: bytes
+    cid: str | None = None
 
 
 class GmailCredentialStore:
@@ -378,6 +415,74 @@ class GmailConnector:
         except HttpError as exc:
             raise EmailProviderError("Gmail API request failed.") from exc
 
+    def create_draft(
+        self,
+        access_token: str,
+        *,
+        raw_message: str,
+        thread_id: str,
+    ) -> dict[str, Any]:
+        try:
+            return dict(
+                self._service(access_token)
+                .users()
+                .drafts()
+                .create(
+                    userId="me",
+                    body={"message": {"raw": raw_message, "threadId": thread_id}},
+                )
+                .execute()
+            )
+        except HttpError as exc:
+            raise EmailProviderError("Gmail API request failed.") from exc
+
+    def update_draft(
+        self,
+        access_token: str,
+        draft_id: str,
+        *,
+        raw_message: str,
+        thread_id: str,
+    ) -> dict[str, Any]:
+        try:
+            return dict(
+                self._service(access_token)
+                .users()
+                .drafts()
+                .update(
+                    userId="me",
+                    id=draft_id,
+                    body={"id": draft_id, "message": {"raw": raw_message, "threadId": thread_id}},
+                )
+                .execute()
+            )
+        except HttpError as exc:
+            raise EmailProviderError("Gmail API request failed.") from exc
+
+    def send_draft(self, access_token: str, draft_id: str) -> dict[str, Any]:
+        try:
+            return dict(
+                self._service(access_token)
+                .users()
+                .drafts()
+                .send(userId="me", body={"id": draft_id})
+                .execute()
+            )
+        except HttpError as exc:
+            raise EmailProviderError("Gmail API request failed.") from exc
+
+    def delete_draft(self, access_token: str, draft_id: str) -> None:
+        try:
+            (
+                self._service(access_token)
+                .users()
+                .drafts()
+                .delete(userId="me", id=draft_id)
+                .execute()
+            )
+        except HttpError as exc:
+            raise EmailProviderError("Gmail API request failed.") from exc
+
     def _google_credential(self, credential: GmailCredential) -> GoogleCredentials:
         return GoogleCredentials(
             token=credential.access_token,
@@ -648,6 +753,102 @@ class EmailContextService:
             )
         return self._link_response(thread_id)
 
+    def save_reply_draft(
+        self,
+        thread_id: str,
+        *,
+        draft_id: str | None,
+        reply_mode: str,
+        anchor_message_id: str | None,
+        to: list[EmailParticipant],
+        cc: list[EmailParticipant],
+        bcc: list[EmailParticipant],
+        subject: str | None,
+        body_html: str | None,
+        body_text: str | None,
+        inline_images: list[EmailDraftFile] | None = None,
+        attachments: list[EmailDraftFile] | None = None,
+    ) -> EmailReplyDraftResponse:
+        if reply_mode not in {"reply", "reply_all"}:
+            raise EmailContextServiceError(
+                "Unsupported reply mode.",
+                details={"reply_mode": reply_mode, "supported": ["reply", "reply_all"]},
+            )
+        credential = self._credential()
+        thread = self.connector.get_thread(credential.access_token or "", thread_id)
+        messages = _non_draft_messages(thread)
+        anchor = _find_anchor_message(messages, anchor_message_id)
+        if not anchor:
+            raise EmailNotFound("Reply anchor message not found.", details={"thread_id": thread_id})
+        anchor_headers = _headers(anchor)
+        resolved_to, resolved_cc = _reply_recipients(
+            anchor_headers,
+            reply_mode=reply_mode,
+            account_email=credential.email,
+        )
+        final_to = _dedupe_participants(to) or resolved_to
+        final_cc = _dedupe_participants(cc) or (resolved_cc if reply_mode == "reply_all" else [])
+        final_bcc = _dedupe_participants(bcc)
+        if not final_to:
+            raise EmailContextServiceError("At least one reply recipient is required.")
+        final_subject = _reply_subject(subject or anchor_headers.get("subject") or "")
+        all_files = [*(inline_images or []), *(attachments or [])]
+        total_bytes = sum(len(item.content) for item in all_files)
+        if total_bytes > MAX_DRAFT_UPLOAD_BYTES:
+            raise EmailContextServiceError(
+                "Reply draft attachments are too large.",
+                details={"max_bytes": MAX_DRAFT_UPLOAD_BYTES, "actual_bytes": total_bytes},
+            )
+        raw_message = _build_reply_mime(
+            from_participant=EmailParticipant(email=credential.email),
+            to=final_to,
+            cc=final_cc,
+            bcc=final_bcc,
+            subject=final_subject,
+            body_html=body_html,
+            body_text=body_text,
+            in_reply_to=anchor_headers.get("message-id"),
+            references=_reply_references(anchor_headers),
+            inline_images=inline_images or [],
+            attachments=attachments or [],
+        )
+        if draft_id:
+            draft = self.connector.update_draft(
+                credential.access_token or "",
+                draft_id,
+                raw_message=raw_message,
+                thread_id=thread_id,
+            )
+        else:
+            draft = self.connector.create_draft(
+                credential.access_token or "",
+                raw_message=raw_message,
+                thread_id=thread_id,
+            )
+        draft_message = draft.get("message") or {}
+        return EmailReplyDraftResponse(
+            draft_id=str(draft.get("id") or draft_id or ""),
+            message_id=str(draft_message["id"]) if draft_message.get("id") else None,
+            thread_id=thread_id,
+            to=final_to,
+            cc=final_cc,
+            bcc=final_bcc,
+            subject=final_subject,
+        )
+
+    def send_draft(self, draft_id: str) -> EmailDraftSendResponse:
+        credential = self._credential()
+        message = self.connector.send_draft(credential.access_token or "", draft_id)
+        return EmailDraftSendResponse(
+            draft_id=draft_id,
+            message_id=str(message["id"]) if message.get("id") else None,
+            thread_id=str(message["threadId"]) if message.get("threadId") else None,
+        )
+
+    def delete_draft(self, draft_id: str) -> None:
+        credential = self._credential()
+        self.connector.delete_draft(credential.access_token or "", draft_id)
+
     def _link_response(self, thread_id: str) -> EmailThreadLinkResponse:
         detail = self.get_thread(thread_id)
         return EmailThreadLinkResponse(thread_id=thread_id, links=detail.crm_links)
@@ -867,6 +1068,8 @@ def _message_response(message: dict[str, Any]) -> GmailMessageResponse:
     body = _message_body(message.get("payload") or {})
     return GmailMessageResponse(
         id=str(message["id"]),
+        rfc_message_id=headers.get("message-id"),
+        references=headers.get("references"),
         sender=sender,
         to=_participants(headers.get("to")),
         cc=_participants(headers.get("cc")),
@@ -883,6 +1086,204 @@ def _participants(value: str | None) -> list[EmailParticipant]:
         for name, email in getaddresses([value or ""])
         if email
     ]
+
+
+def _dedupe_participants(participants: list[EmailParticipant]) -> list[EmailParticipant]:
+    seen: set[str] = set()
+    deduped: list[EmailParticipant] = []
+    for participant in participants:
+        email = (participant.email or "").strip()
+        if not email or email.lower() in seen:
+            continue
+        seen.add(email.lower())
+        deduped.append(EmailParticipant(name=participant.name, email=email))
+    return deduped
+
+
+def _non_draft_messages(thread: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        message
+        for message in thread.get("messages") or []
+        if "DRAFT" not in set(message.get("labelIds") or [])
+    ]
+
+
+def _find_anchor_message(
+    messages: list[dict[str, Any]],
+    anchor_message_id: str | None,
+) -> dict[str, Any] | None:
+    if anchor_message_id:
+        return next(
+            (message for message in messages if str(message.get("id")) == anchor_message_id),
+            None,
+        )
+    return messages[-1] if messages else None
+
+
+def _reply_recipients(
+    headers: dict[str, str],
+    *,
+    reply_mode: str,
+    account_email: str,
+) -> tuple[list[EmailParticipant], list[EmailParticipant]]:
+    excluded = {account_email.lower()}
+    sender = _participants(headers.get("reply-to") or headers.get("from"))
+    to = _exclude_participants(sender, excluded)
+    if reply_mode != "reply_all":
+        return to, []
+    cc_candidates = [*sender, *_participants(headers.get("to")), *_participants(headers.get("cc"))]
+    recipients = _exclude_participants(cc_candidates, excluded)
+    return recipients[:1] or recipients, recipients[1:]
+
+
+def _exclude_participants(
+    participants: list[EmailParticipant],
+    excluded: set[str],
+) -> list[EmailParticipant]:
+    return [
+        participant
+        for participant in _dedupe_participants(participants)
+        if participant.email and participant.email.lower() not in excluded
+    ]
+
+
+def _reply_subject(subject: str) -> str:
+    stripped = subject.strip()
+    if not stripped:
+        return "Re:"
+    return stripped if stripped.lower().startswith("re:") else f"Re: {stripped}"
+
+
+def _reply_references(headers: dict[str, str]) -> str | None:
+    references = headers.get("references", "").strip()
+    message_id = headers.get("message-id", "").strip()
+    if references and message_id and message_id not in references:
+        return f"{references} {message_id}"
+    return references or message_id or None
+
+
+def _format_address(participant: EmailParticipant) -> str:
+    email = participant.email or ""
+    return formataddr((participant.name or "", email)) if participant.name else email
+
+
+def _set_reply_headers(
+    message: EmailMessage,
+    *,
+    from_participant: EmailParticipant,
+    to: list[EmailParticipant],
+    cc: list[EmailParticipant],
+    bcc: list[EmailParticipant],
+    subject: str,
+    in_reply_to: str | None,
+    references: str | None,
+) -> None:
+    message["From"] = _format_address(from_participant)
+    message["To"] = ", ".join(_format_address(participant) for participant in to)
+    if cc:
+        message["Cc"] = ", ".join(_format_address(participant) for participant in cc)
+    if bcc:
+        message["Bcc"] = ", ".join(_format_address(participant) for participant in bcc)
+    message["Subject"] = subject
+    if in_reply_to:
+        message["In-Reply-To"] = in_reply_to
+    if references:
+        message["References"] = references
+
+
+def _build_reply_mime(
+    *,
+    from_participant: EmailParticipant,
+    to: list[EmailParticipant],
+    cc: list[EmailParticipant],
+    bcc: list[EmailParticipant],
+    subject: str,
+    body_html: str | None,
+    body_text: str | None,
+    in_reply_to: str | None,
+    references: str | None,
+    inline_images: list[EmailDraftFile],
+    attachments: list[EmailDraftFile],
+) -> str:
+    text = body_text or _plain_text_from_html(body_html or "")
+    html = _sanitize_reply_html(body_html or text.replace("\n", "<br>"))
+
+    alternative = EmailMessage()
+    alternative.set_content(text or " ")
+    alternative.add_alternative(html or " ", subtype="html")
+
+    body_part: EmailMessage = alternative
+    if inline_images:
+        related = EmailMessage()
+        related.make_related()
+        related.attach(alternative)
+        for image in inline_images:
+            maintype, subtype = _content_type_parts(image.content_type)
+            part = EmailMessage()
+            part.set_content(image.content, maintype=maintype, subtype=subtype)
+            part.add_header("Content-ID", f"<{image.cid}>")
+            part.add_header("Content-Disposition", "inline", filename=image.filename)
+            related.attach(part)
+        body_part = related
+
+    if attachments:
+        root = EmailMessage()
+        _set_reply_headers(
+            root,
+            from_participant=from_participant,
+            to=to,
+            cc=cc,
+            bcc=bcc,
+            subject=subject,
+            in_reply_to=in_reply_to,
+            references=references,
+        )
+        root.make_mixed()
+        root.attach(body_part)
+        for attachment in attachments:
+            maintype, subtype = _content_type_parts(attachment.content_type)
+            root.add_attachment(
+                attachment.content,
+                maintype=maintype,
+                subtype=subtype,
+                filename=attachment.filename,
+            )
+        message = root
+    else:
+        message = body_part
+        _set_reply_headers(
+            message,
+            from_participant=from_participant,
+            to=to,
+            cc=cc,
+            bcc=bcc,
+            subject=subject,
+            in_reply_to=in_reply_to,
+            references=references,
+        )
+    return base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
+
+
+def _content_type_parts(content_type: str | None) -> tuple[str, str]:
+    if content_type and "/" in content_type:
+        maintype, subtype = content_type.split("/", 1)
+        return maintype or "application", subtype or "octet-stream"
+    return "application", "octet-stream"
+
+
+def _sanitize_reply_html(html: str) -> str:
+    return bleach.clean(
+        html,
+        tags=ALLOWED_REPLY_HTML_TAGS,
+        attributes=ALLOWED_REPLY_HTML_ATTRIBUTES,
+        protocols=["http", "https", "mailto", "cid"],
+        strip=True,
+    )
+
+
+def _plain_text_from_html(html: str) -> str:
+    stripped = bleach.clean(html, tags=[], strip=True)
+    return stripped.replace("\xa0", " ").strip()
 
 
 def _message_datetime(message: dict[str, Any]) -> datetime | None:

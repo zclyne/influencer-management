@@ -243,7 +243,7 @@ export interface InfluencerDealSummary {
   id: string
   campaign_id: string
   campaign_name?: string | null
-  status: string
+  status: DealStatus
   created_at: string
   updated_at: string
   archived_at?: string | null
@@ -420,6 +420,9 @@ export interface IngestionConfirmResponse {
 
 export type DealStatus =
   | 'DRAFT'
+  | 'OUTREACHED'
+  | 'NEGOTIATING'
+  | 'CONFIRMED'
   | 'ACTIVE'
   | 'COMPLETED'
   | 'LOST'
@@ -770,6 +773,8 @@ export interface EmailThreadBatchResponse {
 
 export interface GmailMessageResponse {
   id: string
+  rfc_message_id?: string | null
+  references?: string | null
   sender?: EmailParticipant | null
   to: EmailParticipant[]
   cc: EmailParticipant[]
@@ -791,4 +796,22 @@ export interface EmailThreadLinkRequest {
 export interface EmailThreadLinkResponse {
   thread_id: string
   links: EmailCrmLink[]
+}
+
+export type EmailReplyMode = 'reply' | 'reply_all'
+
+export interface EmailReplyDraftResponse {
+  draft_id: string
+  message_id?: string | null
+  thread_id: string
+  to: EmailParticipant[]
+  cc: EmailParticipant[]
+  bcc: EmailParticipant[]
+  subject: string
+}
+
+export interface EmailDraftSendResponse {
+  draft_id: string
+  message_id?: string | null
+  thread_id?: string | null
 }

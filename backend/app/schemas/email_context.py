@@ -62,6 +62,8 @@ class GmailThreadListResponse(BaseModel):
 
 class GmailMessageResponse(BaseModel):
     id: str
+    rfc_message_id: str | None = None
+    references: str | None = None
     sender: EmailParticipant | None = None
     to: list[EmailParticipant] = Field(default_factory=list)
     cc: list[EmailParticipant] = Field(default_factory=list)
@@ -97,3 +99,22 @@ class EmailThreadBatchResponse(BaseModel):
     thread_ids: list[str]
     action: EmailThreadBatchAction
     updated_count: int
+
+
+ReplyMode = Literal["reply", "reply_all"]
+
+
+class EmailReplyDraftResponse(BaseModel):
+    draft_id: str
+    message_id: str | None = None
+    thread_id: str
+    to: list[EmailParticipant] = Field(default_factory=list)
+    cc: list[EmailParticipant] = Field(default_factory=list)
+    bcc: list[EmailParticipant] = Field(default_factory=list)
+    subject: str
+
+
+class EmailDraftSendResponse(BaseModel):
+    draft_id: str
+    message_id: str | None = None
+    thread_id: str | None = None

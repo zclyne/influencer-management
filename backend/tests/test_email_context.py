@@ -1,4 +1,7 @@
+import base64
 from datetime import UTC, datetime, timedelta
+from email import policy
+from email.parser import BytesParser
 from pathlib import Path
 from typing import Any
 
@@ -7,9 +10,14 @@ from sqlalchemy.orm import Session
 from app.db.models import Base
 from app.enums import DealStatus
 from app.repositories.sqlalchemy import CampaignRepository, DealRepository, InfluencerRepository
-from app.schemas.email_context import EmailThreadBatchRequest, EmailThreadLinkRequest
+from app.schemas.email_context import (
+    EmailParticipant,
+    EmailThreadBatchRequest,
+    EmailThreadLinkRequest,
+)
 from app.services.email_context import (
     EmailContextService,
+    EmailDraftFile,
     EmailProviderError,
     EmailReconnectRequired,
     GmailConnector,
@@ -25,6 +33,10 @@ class FakeGmailConnector:
             {"id": "UNREAD", "name": "UNREAD", "type": "system"},
         ]
         self.modified: list[dict[str, Any]] = []
+        self.created_drafts: list[dict[str, Any]] = []
+        self.updated_drafts: list[dict[str, Any]] = []
+        self.sent_drafts: list[str] = []
+        self.deleted_drafts: list[str] = []
         self.list_thread_calls: list[dict[str, Any]] = []
         self.thread_label_ids: dict[str, list[str]] = {"thread-1": ["INBOX", "UNREAD"]}
 
@@ -115,8 +127,14 @@ class FakeGmailConnector:
                         "mimeType": "text/plain",
                         "headers": [
                             {"name": "Subject", "value": "Campaign details"},
+                            {"name": "Message-ID", "value": "<msg-1@example.com>"},
+                            {"name": "References", "value": "<root@example.com>"},
                             {"name": "From", "value": "Creator <creator@example.com>"},
-                            {"name": "To", "value": "Agency <agency@example.com>"},
+                            {
+                                "name": "To",
+                                "value": "Agency <agency@example.com>, Other <other@example.com>",
+                            },
+                            {"name": "Cc", "value": "Second <second@example.com>"},
                             {"name": "Date", "value": "Fri, 1 May 2026 12:00:00 +0000"},
                         ],
                         "body": {"data": "SGVsbG8"},
@@ -124,6 +142,31 @@ class FakeGmailConnector:
                 }
             ],
         }
+
+    def create_draft(
+        self,
+        access_token: str,
+        *,
+        raw_message: str,
+        thread_id: str,
+    ) -> dict[str, Any]:
+        self.created_drafts.append({"raw": raw_message, "thread_id": thread_id})
+        return {"id": "draft-1", "message": {"id": "draft-message-1", "threadId": thread_id}}
+
+    def update_draft(
+        self, access_token: str, draft_id: str, *, raw_message: str, thread_id: str
+    ) -> dict[str, Any]:
+        self.updated_drafts.append(
+            {"draft_id": draft_id, "raw": raw_message, "thread_id": thread_id}
+        )
+        return {"id": draft_id, "message": {"id": "draft-message-2", "threadId": thread_id}}
+
+    def send_draft(self, access_token: str, draft_id: str) -> dict[str, Any]:
+        self.sent_drafts.append(draft_id)
+        return {"id": "sent-message-1", "threadId": "thread-1"}
+
+    def delete_draft(self, access_token: str, draft_id: str) -> None:
+        self.deleted_drafts.append(draft_id)
 
 
 class RefreshFailingGmailConnector(FakeGmailConnector):
@@ -159,6 +202,12 @@ def _create_deal(db_session: Session) -> tuple[str, str]:
     )
     db_session.commit()
     return campaign.id, deal.id
+
+
+def _decoded_message(raw: str):
+    padding = "=" * (-len(raw) % 4)
+    data = base64.urlsafe_b64decode(f"{raw}{padding}".encode("ascii"))
+    return BytesParser(policy=policy.default).parsebytes(data)
 
 
 def test_email_tables_are_not_part_of_local_metadata() -> None:
@@ -390,6 +439,103 @@ def test_get_thread_can_skip_marking_unread_thread_as_read(
     assert response.unread is True
     assert "UNREAD" in connector.thread_label_ids["thread-1"]
     assert connector.modified == []
+
+
+def test_reply_draft_create_builds_threaded_mime_and_recipients(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    _create_deal(db_session)
+    connector = FakeGmailConnector()
+    service = EmailContextService(
+        db_session,
+        connector=connector,  # type: ignore[arg-type]
+        credential_store=_store(tmp_path),
+    )
+
+    response = service.save_reply_draft(
+        "thread-1",
+        draft_id=None,
+        reply_mode="reply_all",
+        anchor_message_id=None,
+        to=[],
+        cc=[],
+        bcc=[],
+        subject=None,
+        body_html=(
+            '<p>Hello <strong>there</strong><script>alert("x")</script>'
+            '<img src="cid:inline-1"></p>'
+        ),
+        body_text="Hello there",
+        inline_images=[
+            EmailDraftFile(
+                filename="inline.png",
+                content_type="image/png",
+                content=b"inline-image",
+                cid="inline-1",
+            )
+        ],
+        attachments=[
+            EmailDraftFile(
+                filename="brief.pdf",
+                content_type="application/pdf",
+                content=b"attachment",
+            )
+        ],
+    )
+
+    assert response.draft_id == "draft-1"
+    assert response.subject == "Re: Campaign details"
+    assert [participant.email for participant in response.to] == ["creator@example.com"]
+    assert {participant.email for participant in response.cc} == {
+        "other@example.com",
+        "second@example.com",
+    }
+    assert connector.created_drafts[0]["thread_id"] == "thread-1"
+    message = _decoded_message(connector.created_drafts[0]["raw"])
+    assert message["Subject"] == "Re: Campaign details"
+    assert message["In-Reply-To"] == "<msg-1@example.com>"
+    assert message["References"] == "<root@example.com> <msg-1@example.com>"
+    assert "agency@example.com" not in message["To"]
+    assert any(part.get_content_type() == "text/html" for part in message.walk())
+    assert any(part.get("Content-ID") == "<inline-1>" for part in message.walk())
+    assert any(part.get_filename() == "brief.pdf" for part in message.walk())
+    html_part = next(part for part in message.walk() if part.get_content_type() == "text/html")
+    assert "<script>" not in html_part.get_content()
+
+
+def test_reply_draft_update_send_and_delete(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    _create_deal(db_session)
+    connector = FakeGmailConnector()
+    service = EmailContextService(
+        db_session,
+        connector=connector,  # type: ignore[arg-type]
+        credential_store=_store(tmp_path),
+    )
+
+    update_response = service.save_reply_draft(
+        "thread-1",
+        draft_id="draft-1",
+        reply_mode="reply",
+        anchor_message_id="msg-1",
+        to=[EmailParticipant(email="creator@example.com", name="Creator")],
+        cc=[],
+        bcc=[],
+        subject="Re: Campaign details",
+        body_html="<p>Updated</p>",
+        body_text="Updated",
+    )
+    send_response = service.send_draft("draft-1")
+    service.delete_draft("draft-2")
+
+    assert update_response.message_id == "draft-message-2"
+    assert connector.updated_drafts[0]["draft_id"] == "draft-1"
+    assert send_response.message_id == "sent-message-1"
+    assert connector.sent_drafts == ["draft-1"]
+    assert connector.deleted_drafts == ["draft-2"]
 
 
 class FakeGoogleRequest:

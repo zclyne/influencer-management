@@ -1,21 +1,38 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import { EditorContent, useEditor } from '@tiptap/vue-3'
+import StarterKit from '@tiptap/starter-kit'
+import Underline from '@tiptap/extension-underline'
+import Link from '@tiptap/extension-link'
+import Image from '@tiptap/extension-image'
 import {
+  Bold,
   ChevronLeft,
   ChevronRight,
+  Image as ImageIcon,
+  Italic,
+  List,
+  ListOrdered,
   Link as LinkIcon,
   MailCheck,
   MailOpen,
+  Paperclip,
   Pencil,
   RefreshCw,
+  Reply,
+  ReplyAll,
+  Send,
   Trash2,
+  Underline as UnderlineIcon,
   Unplug,
+  X,
 } from '@lucide/vue'
 import {
   ApiError,
   batchEmailThreads,
+  deleteEmailDraft,
   disconnectEmail,
   errorMessage,
   getEmailAuthStatus,
@@ -25,6 +42,8 @@ import {
   listCampaigns,
   listEmailLabels,
   listEmailThreads,
+  saveEmailReplyDraft,
+  sendEmailDraft,
   startEmailAuth,
   unlinkEmailThread,
 } from '../api/client'
@@ -32,6 +51,8 @@ import type {
   CampaignResponse,
   DealPipelineRow,
   EmailCrmLink,
+  EmailParticipant,
+  EmailReplyMode,
   EmailThreadBatchAction,
   GmailAuthStatusResponse,
   GmailLabelResponse,
@@ -88,6 +109,20 @@ const linkCampaignId = ref<string | undefined>()
 const linkDealId = ref<string | undefined>()
 const linkDeals = ref<DealPipelineRow[]>([])
 const error = ref<string | null>(null)
+const composerOpen = ref(false)
+const composerAnchorMessageId = ref<string | null>(null)
+const composerMode = ref<EmailReplyMode>('reply')
+const composerDraftId = ref<string | null>(null)
+const composerTo = ref('')
+const composerCc = ref('')
+const composerBcc = ref('')
+const composerSubject = ref('')
+const composerBodyHtml = ref('')
+const composerAttachments = ref<File[]>([])
+const composerInlineImages = ref<{ cid: string; file: File; url: string }[]>([])
+const composerSaveStatus = ref<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+const composerSending = ref(false)
+let composerSaveTimer: number | null = null
 
 const reconnectRequired = computed(() => authStatus.value?.reconnect_required === true)
 const connected = computed(() => authStatus.value?.connected === true && !reconnectRequired.value)
@@ -170,6 +205,19 @@ const hasThreadFilters = computed(() =>
 )
 const maxMessageFrameHeight = 520
 const minMessageFrameHeight = 72
+const composerEditor = useEditor({
+  extensions: [
+    StarterKit,
+    Underline,
+    Link.configure({ openOnClick: false }),
+    Image.configure({ allowBase64: true }),
+  ],
+  content: '',
+  onUpdate: ({ editor }) => {
+    composerBodyHtml.value = editor.getHTML()
+    scheduleComposerSave()
+  },
+})
 
 const loadAuthStatus = async () => {
   authStatus.value = await getEmailAuthStatus()
@@ -683,6 +731,209 @@ const emailHtmlSrcdoc = (html: string) => {
   return `<!doctype html><html><head>${emailHeadContent}</head><body>${html}</body></html>`
 }
 
+const participantAddress = (participant?: EmailParticipant | null) => {
+  if (!participant?.email) return ''
+  return participant.name ? `${participant.name} <${participant.email}>` : participant.email
+}
+
+const parseParticipantList = (value: string): EmailParticipant[] =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const match = /^(.*?)<([^>]+)>$/.exec(item)
+      if (!match) return { email: item }
+      return { name: match[1].trim() || null, email: match[2].trim() }
+    })
+
+const participantListText = (participants: EmailParticipant[]) =>
+  participants.map(participantAddress).filter(Boolean).join(', ')
+
+const dedupeParticipants = (participants: EmailParticipant[]) => {
+  const seen = new Set<string>()
+  return participants.filter((participant) => {
+    const email = participant.email?.toLowerCase()
+    if (!email || seen.has(email)) return false
+    seen.add(email)
+    return true
+  })
+}
+
+const excludeAccount = (participants: EmailParticipant[]) => {
+  const account = authStatus.value?.email?.toLowerCase()
+  return dedupeParticipants(
+    participants.filter((participant) => participant.email?.toLowerCase() !== account),
+  )
+}
+
+const replyRecipientsFor = (mail: GmailMessageResponse, mode: EmailReplyMode) => {
+  const sender = mail.sender ? [mail.sender] : []
+  if (mode === 'reply') {
+    return { to: excludeAccount(sender), cc: [] }
+  }
+  const all = excludeAccount([...sender, ...mail.to, ...mail.cc])
+  return { to: all.slice(0, 1), cc: all.slice(1) }
+}
+
+const latestMessage = () => selectedThread.value?.messages.at(-1)
+
+const openComposer = (mode: EmailReplyMode, mail?: GmailMessageResponse) => {
+  const anchor = mail ?? latestMessage()
+  if (!selectedThread.value || !anchor) return
+  const recipients = replyRecipientsFor(anchor, mode)
+  composerOpen.value = true
+  composerAnchorMessageId.value = anchor.id
+  composerMode.value = mode
+  composerDraftId.value = null
+  composerTo.value = participantListText(recipients.to)
+  composerCc.value = participantListText(recipients.cc)
+  composerBcc.value = ''
+  composerSubject.value = selectedThread.value.subject?.toLowerCase().startsWith('re:')
+    ? selectedThread.value.subject
+    : `Re: ${selectedThread.value.subject || ''}`.trim()
+  composerAttachments.value = []
+  composerInlineImages.value.forEach((image) => URL.revokeObjectURL(image.url))
+  composerInlineImages.value = []
+  composerSaveStatus.value = 'idle'
+  composerEditor.value?.commands.setContent('')
+}
+
+const closeComposer = () => {
+  if (composerSaveTimer) window.clearTimeout(composerSaveTimer)
+  composerOpen.value = false
+  composerAnchorMessageId.value = null
+  composerDraftId.value = null
+  composerAttachments.value = []
+  composerInlineImages.value.forEach((image) => URL.revokeObjectURL(image.url))
+  composerInlineImages.value = []
+  composerSaveStatus.value = 'idle'
+  composerEditor.value?.commands.setContent('')
+}
+
+const composerHtmlForSend = () => {
+  const html = composerEditor.value?.getHTML() ?? composerBodyHtml.value
+  if (typeof DOMParser === 'undefined') return html
+  const document = new DOMParser().parseFromString(html, 'text/html')
+  composerInlineImages.value.forEach((image) => {
+    document
+      .querySelectorAll('img')
+      .forEach((node) => {
+        if (node.getAttribute('src') === image.url) node.setAttribute('src', `cid:${image.cid}`)
+      })
+  })
+  return document.body.innerHTML
+}
+
+const saveComposerDraft = async ({ force = false }: { force?: boolean } = {}) => {
+  if (!composerOpen.value || !selectedThread.value) return null
+  const text = composerEditor.value?.getText().trim() ?? ''
+  if (!force && !text && !composerAttachments.value.length && !composerInlineImages.value.length) {
+    return composerDraftId.value
+  }
+  composerSaveStatus.value = 'saving'
+  try {
+    const response = await saveEmailReplyDraft(selectedThread.value.id, {
+      draftId: composerDraftId.value,
+      replyMode: composerMode.value,
+      anchorMessageId: composerAnchorMessageId.value,
+      to: parseParticipantList(composerTo.value),
+      cc: parseParticipantList(composerCc.value),
+      bcc: parseParticipantList(composerBcc.value),
+      subject: composerSubject.value,
+      bodyHtml: composerHtmlForSend(),
+      bodyText: composerEditor.value?.getText() ?? '',
+      inlineImages: composerInlineImages.value.map((image) => ({ cid: image.cid, file: image.file })),
+      attachments: composerAttachments.value,
+    })
+    composerDraftId.value = response.draft_id
+    composerSaveStatus.value = 'saved'
+    return response.draft_id
+  } catch (saveError) {
+    composerSaveStatus.value = 'failed'
+    if (!handleEmailError(saveError)) message.error(errorMessage(saveError))
+    return null
+  }
+}
+
+function scheduleComposerSave() {
+  if (!composerOpen.value) return
+  if (composerSaveTimer) window.clearTimeout(composerSaveTimer)
+  composerSaveStatus.value = 'idle'
+  composerSaveTimer = window.setTimeout(() => {
+    void saveComposerDraft()
+  }, 900)
+}
+
+const sendComposer = async () => {
+  composerSending.value = true
+  try {
+    const draftId = await saveComposerDraft({ force: true })
+    if (!draftId) {
+      message.error('Save the draft before sending.')
+      return
+    }
+    await sendEmailDraft(draftId)
+    closeComposer()
+    if (selectedThread.value) await openThread(selectedThread.value.id, { markRead: false })
+    message.success('Reply sent.')
+  } catch (sendError) {
+    if (!handleEmailError(sendError)) message.error(errorMessage(sendError))
+  } finally {
+    composerSending.value = false
+  }
+}
+
+const discardComposer = async () => {
+  try {
+    if (composerDraftId.value) await deleteEmailDraft(composerDraftId.value)
+    closeComposer()
+    message.success('Draft discarded.')
+  } catch (discardError) {
+    if (!handleEmailError(discardError)) message.error(errorMessage(discardError))
+  }
+}
+
+const handleAttachmentFiles = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  composerAttachments.value = [...composerAttachments.value, ...Array.from(input.files ?? [])]
+  input.value = ''
+  scheduleComposerSave()
+}
+
+const handleInlineImageFiles = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  Array.from(input.files ?? []).forEach((file) => {
+    const image = {
+      cid: `cf-${crypto.randomUUID()}@creatorflow`,
+      file,
+      url: URL.createObjectURL(file),
+    }
+    composerInlineImages.value = [...composerInlineImages.value, image]
+    composerEditor.value?.chain().focus().setImage({ src: image.url, alt: file.name }).run()
+  })
+  input.value = ''
+  scheduleComposerSave()
+}
+
+const removeAttachment = (index: number) => {
+  composerAttachments.value = composerAttachments.value.filter((_, itemIndex) => itemIndex !== index)
+  scheduleComposerSave()
+}
+
+const setComposerLink = () => {
+  const previousUrl = composerEditor.value?.getAttributes('link').href as string | undefined
+  const url = window.prompt('Link URL', previousUrl ?? '')
+  if (url === null) return
+  if (!url.trim()) {
+    composerEditor.value?.chain().focus().unsetLink().run()
+    return
+  }
+  composerEditor.value?.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run()
+}
+
+watch([composerTo, composerCc, composerBcc, composerSubject], () => scheduleComposerSave())
+
 watch(selectedCampaignId, async () => {
   selectedDealId.value = undefined
   await loadDeals()
@@ -710,6 +961,11 @@ onMounted(async () => {
   } catch (pageError) {
     error.value = errorMessage(pageError)
   }
+})
+
+onBeforeUnmount(() => {
+  if (composerSaveTimer) window.clearTimeout(composerSaveTimer)
+  composerInlineImages.value.forEach((image) => URL.revokeObjectURL(image.url))
 })
 </script>
 
@@ -1015,6 +1271,14 @@ onMounted(async () => {
                       <LinkIcon class="button-leading-icon" aria-hidden="true" />
                       {{ linkButtonLabel() }}
                     </a-button>
+                    <a-button @click="openComposer('reply')">
+                      <Reply class="button-leading-icon" aria-hidden="true" />
+                      Reply
+                    </a-button>
+                    <a-button @click="openComposer('reply_all')">
+                      <ReplyAll class="button-leading-icon" aria-hidden="true" />
+                      Reply all
+                    </a-button>
                   </div>
                 </div>
               </div>
@@ -1047,6 +1311,118 @@ onMounted(async () => {
                   >
                     {{ quotedTextExpanded(mail.id) ? 'Hide quoted text' : 'Show quoted text' }}
                   </a-button>
+                  <div class="message-actions">
+                    <a-button size="small" @click="openComposer('reply', mail)">
+                      <Reply class="button-leading-icon" aria-hidden="true" />
+                      Reply
+                    </a-button>
+                  </div>
+                  <div v-if="composerOpen && composerAnchorMessageId === mail.id" class="reply-composer">
+                    <div class="composer-fields">
+                      <a-input v-model:value="composerTo" placeholder="To" />
+                      <a-input v-model:value="composerCc" placeholder="Cc" />
+                      <a-input v-model:value="composerBcc" placeholder="Bcc" />
+                      <a-input v-model:value="composerSubject" placeholder="Subject" />
+                    </div>
+                    <div class="composer-toolbar">
+                      <a-button
+                        class="icon-button"
+                        type="text"
+                        title="Bold"
+                        aria-label="Bold"
+                        @click="composerEditor?.chain().focus().toggleBold().run()"
+                      >
+                        <Bold aria-hidden="true" />
+                      </a-button>
+                      <a-button
+                        class="icon-button"
+                        type="text"
+                        title="Italic"
+                        aria-label="Italic"
+                        @click="composerEditor?.chain().focus().toggleItalic().run()"
+                      >
+                        <Italic aria-hidden="true" />
+                      </a-button>
+                      <a-button
+                        class="icon-button"
+                        type="text"
+                        title="Underline"
+                        aria-label="Underline"
+                        @click="composerEditor?.chain().focus().toggleUnderline().run()"
+                      >
+                        <UnderlineIcon aria-hidden="true" />
+                      </a-button>
+                      <a-button
+                        class="icon-button"
+                        type="text"
+                        title="Bulleted list"
+                        aria-label="Bulleted list"
+                        @click="composerEditor?.chain().focus().toggleBulletList().run()"
+                      >
+                        <List aria-hidden="true" />
+                      </a-button>
+                      <a-button
+                        class="icon-button"
+                        type="text"
+                        title="Numbered list"
+                        aria-label="Numbered list"
+                        @click="composerEditor?.chain().focus().toggleOrderedList().run()"
+                      >
+                        <ListOrdered aria-hidden="true" />
+                      </a-button>
+                      <a-button
+                        class="icon-button"
+                        type="text"
+                        title="Link"
+                        aria-label="Link"
+                        @click="setComposerLink"
+                      >
+                        <LinkIcon aria-hidden="true" />
+                      </a-button>
+                      <label class="icon-upload-button" title="Inline image" aria-label="Inline image">
+                        <ImageIcon aria-hidden="true" />
+                        <input type="file" accept="image/*" multiple @change="handleInlineImageFiles" />
+                      </label>
+                      <label class="icon-upload-button" title="Attachment" aria-label="Attachment">
+                        <Paperclip aria-hidden="true" />
+                        <input type="file" multiple @change="handleAttachmentFiles" />
+                      </label>
+                    </div>
+                    <EditorContent class="composer-editor" :editor="composerEditor" />
+                    <div v-if="composerAttachments.length" class="attachment-row">
+                      <a-tag
+                        v-for="(file, index) in composerAttachments"
+                        :key="`${file.name}-${index}`"
+                        closable
+                        @close.prevent="removeAttachment(index)"
+                      >
+                        {{ file.name }}
+                      </a-tag>
+                    </div>
+                    <div class="composer-footer">
+                      <span class="save-status">
+                        {{
+                          composerSaveStatus === 'saving'
+                            ? 'Saving'
+                            : composerSaveStatus === 'saved'
+                              ? 'Saved'
+                              : composerSaveStatus === 'failed'
+                                ? 'Save failed'
+                                : ''
+                        }}
+                      </span>
+                      <a-space>
+                        <a-button danger :disabled="composerSending" @click="discardComposer">
+                          <X class="button-leading-icon" aria-hidden="true" />
+                          Discard
+                        </a-button>
+                        <a-button type="primary" :loading="composerSending" @click="sendComposer">
+                          <Send class="button-leading-icon" aria-hidden="true" />
+                          Send
+                        </a-button>
+                      </a-space>
+                    </div>
+                  </div>
                 </article>
               </div>
             </template>
@@ -1674,12 +2050,89 @@ onMounted(async () => {
   padding: 0;
 }
 
+.message-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .html-frame {
   width: 100%;
   max-height: 520px;
   border: 1px solid #e8edf2;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.reply-composer {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d7dee7;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.composer-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.composer-toolbar,
+.composer-footer,
+.attachment-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.composer-footer {
+  justify-content: space-between;
+}
+
+.icon-upload-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: #4f5c68;
+  cursor: pointer;
+}
+
+.icon-upload-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-upload-button input {
+  display: none;
+}
+
+.composer-editor {
+  min-height: 160px;
+  padding: 10px 12px;
+  border: 1px solid #dfe6ee;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.composer-editor :deep(.ProseMirror) {
+  min-height: 138px;
+  outline: none;
+  overflow-wrap: anywhere;
+}
+
+.composer-editor :deep(img) {
+  max-width: 100%;
+  height: auto;
+}
+
+.save-status {
+  min-width: 76px;
+  color: #697582;
+  font-size: 12px;
 }
 
 @media (max-width: 1100px) {
@@ -1766,6 +2219,10 @@ onMounted(async () => {
   .header-actions :deep(.ant-btn) {
     width: 100%;
     justify-content: center;
+  }
+
+  .composer-fields {
+    grid-template-columns: 1fr;
   }
 
   .thread-list-card {

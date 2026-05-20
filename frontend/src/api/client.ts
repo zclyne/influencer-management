@@ -27,6 +27,10 @@ import type {
   DeliverableUpdateRequest,
   EmailThreadLinkRequest,
   EmailThreadLinkResponse,
+  EmailDraftSendResponse,
+  EmailParticipant,
+  EmailReplyDraftResponse,
+  EmailReplyMode,
   GmailAuthStartResponse,
   GmailAuthStatusResponse,
   GmailLabelListResponse,
@@ -425,6 +429,54 @@ export const unlinkEmailThread = (
       method: 'DELETE',
     },
   )
+
+export const saveEmailReplyDraft = (
+  threadId: string,
+  payload: {
+    draftId?: string | null
+    replyMode: EmailReplyMode
+    anchorMessageId?: string | null
+    to: EmailParticipant[]
+    cc: EmailParticipant[]
+    bcc: EmailParticipant[]
+    subject?: string | null
+    bodyHtml?: string | null
+    bodyText?: string | null
+    inlineImages?: { cid: string; file: File }[]
+    attachments?: File[]
+  },
+) => {
+  const body = new FormData()
+  if (payload.draftId) body.append('draft_id', payload.draftId)
+  body.append('reply_mode', payload.replyMode)
+  if (payload.anchorMessageId) body.append('anchor_message_id', payload.anchorMessageId)
+  body.append('to', JSON.stringify(payload.to))
+  body.append('cc', JSON.stringify(payload.cc))
+  body.append('bcc', JSON.stringify(payload.bcc))
+  if (payload.subject !== undefined && payload.subject !== null) body.append('subject', payload.subject)
+  if (payload.bodyHtml !== undefined && payload.bodyHtml !== null) body.append('body_html', payload.bodyHtml)
+  if (payload.bodyText !== undefined && payload.bodyText !== null) body.append('body_text', payload.bodyText)
+  ;(payload.inlineImages ?? []).forEach((image) => {
+    body.append('inline_image_cids', image.cid)
+    body.append('inline_images', image.file)
+  })
+  ;(payload.attachments ?? []).forEach((file) => body.append('attachments', file))
+
+  return apiRequest<EmailReplyDraftResponse>(`/email/threads/${threadId}/draft-replies`, {
+    method: 'POST',
+    body,
+  })
+}
+
+export const sendEmailDraft = (draftId: string) =>
+  apiRequest<EmailDraftSendResponse>(`/email/drafts/${draftId}/send`, {
+    method: 'POST',
+  })
+
+export const deleteEmailDraft = (draftId: string) =>
+  apiRequest<void>(`/email/drafts/${draftId}`, {
+    method: 'DELETE',
+  })
 
 export const exportCampaignCsv = async (
   campaignId: string,
